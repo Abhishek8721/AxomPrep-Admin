@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AxomPrep Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-brand">
+      <span class="logo">📚</span>
+      <div>
+        <h1>AxomPrep Admin</h1>
+        <p>Learn • Practice • Succeed</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button id="btnNew" class="btn btn-primary">+ New Question</button>
+      <button id="btnLogout" class="btn btn-outline">Logout</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="toolbar">
+      <div class="filters">
+        <select id="filterCategory">
+          <option value="">All Categories</option>
+        </select>
+        <select id="filterDifficulty">
+          <option value="">All Difficulties</option>
+          <option value="Easy">Easy</option>
+          <option value="Medium">Medium</option>
+          <option value="Hard">Hard</option>
+        </select>
+        <input type="search" id="searchInput" placeholder="Search questions..." />
+      </div>
+      <div class="stats" id="statsBar">Loading...</div>
+    </section>
+
+    <div id="alertBox" class="alert hidden"></div>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Category</th>
+            <th>Question</th>
+            <th>Difficulty</th>
+            <th>Answer</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="questionsBody">
+          <tr><td colspan="7" class="empty">Loading questions...</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <!-- Create / Edit Modal -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle">New Question</h2>
+        <button class="btn-icon" data-close>&times;</button>
+      </div>
+      <form id="questionForm">
+        <input type="hidden" id="editDocId" />
+        <div class="form-row">
+          <label>
+            Category *
+            <select id="fieldCategory" required></select>
+          </label>
+          <label>
+            Question ID *
+            <input type="number" id="fieldId" min="1" required placeholder="e.g. 1, 101, 201" />
+          </label>
+          <label>
+            Difficulty *
+            <select id="fieldDifficulty" required></select>
+          </label>
+        </div>
+        <label>
+          Question *
+          <textarea id="fieldQuestion" rows="3" required placeholder="Enter the question text"></textarea>
+        </label>
+        <div class="options-grid">
+          <label>Option A *<input type="text" id="opt0" required /></label>
+          <label>Option B *<input type="text" id="opt1" required /></label>
+          <label>Option C *<input type="text" id="opt2" required /></label>
+          <label>Option D *<input type="text" id="opt3" required /></label>
+        </div>
+        <label>
+          Correct Answer *
+          <select id="fieldCorrectAnswer" required>
+            <option value="0">A — Option 1</option>
+            <option value="1">B — Option 2</option>
+            <option value="2">C — Option 3</option>
+            <option value="3">D — Option 4</option>
+          </select>
+        </label>
+        <label>
+          Explanation *
+          <textarea id="fieldExplanation" rows="3" required placeholder="Why is this the correct answer?"></textarea>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="fieldActive" checked />
+          Active (visible in app)
+        </label>
+        <p id="formError" class="error-msg hidden"></p>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close>Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnSave">Save Question</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete confirm -->
+  <div id="deleteModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-delete></div>
+    <div class="modal-content modal-sm">
+      <h2>Delete Question?</h2>
+      <p id="deleteMessage">This cannot be undone.</p>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close-delete>Cancel</button>
+        <button class="btn btn-danger" id="btnConfirmDelete">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

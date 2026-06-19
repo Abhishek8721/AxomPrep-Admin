@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — AxomPrep Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="login-page">
+  <div class="login-card">
+    <div class="login-logo">📚</div>
+    <h1>AxomPrep Admin</h1>
+    <p class="subtitle">Manage MCQ questions for Firestore</p>
+    <form id="loginForm">
+      <label>
+        Username
+        <input type="text" id="username" name="username" required autocomplete="username" />
+      </label>
+      <label>
+        Password
+        <input type="password" id="password" name="password" required autocomplete="current-password" />
+      </label>
+      <p id="loginError" class="error-msg hidden"></p>
+      <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+    </form>
+  </div>
+  <script>
+    fetch('/api/session').then(r => r.json()).then(s => {
+      if (s.authenticated) window.location.href = '/';
+    });
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById('loginError');
+      errEl.classList.add('hidden');
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('username').value,
+          password: document.getElementById('password').value,
+        }),
+      });
+      if (res.ok) {
+        window.location.href = '/';
+      } else {
+        const data = await res.json();
+        errEl.textContent = data.error || 'Login failed';
+        errEl.classList.remove('hidden');
+      }
+    });
+  </script>
+</body>
+</html>
