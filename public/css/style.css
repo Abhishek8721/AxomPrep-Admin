@@ -275,6 +275,54 @@ label textarea {
 
 .checkbox-label input { width: auto; margin: 0; }
 
+.ai-paste-section {
+  background: linear-gradient(135deg, #fef3c7 0%, #ede9fe 100%);
+  border: 1px solid #e9d5ff;
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.ai-paste-header h3 {
+  font-size: 0.9375rem;
+  color: var(--red);
+  margin-bottom: 4px;
+}
+
+.ai-paste-header p {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.ai-paste-section label { margin-bottom: 10px; }
+
+.ai-verify-notice {
+  font-size: 0.8125rem;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+  line-height: 1.45;
+}
+
+.ai-verify-ok {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.ai-verify-warn {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.form-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 4px 0 18px;
+}
+
 @media (max-width: 640px) {
   .options-grid { grid-template-columns: 1fr; }
   .header { flex-direction: column; align-items: flex-start; }

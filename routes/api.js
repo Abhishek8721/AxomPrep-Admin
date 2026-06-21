@@ -9,6 +9,7 @@ const {
   fromFirestoreDoc,
 } = require('../utils/questions');
 const { requireAuth } = require('../middleware/auth');
+const { generateQuestionFromPaste } = require('../utils/ai');
 
 const router = express.Router();
 
@@ -67,6 +68,17 @@ router.get('/questions/:docId', async (req, res) => {
     res.json(fromFirestoreDoc(doc));
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/questions/generate — rephrase pasted MCQ with AI */
+router.post('/questions/generate', async (req, res) => {
+  try {
+    const generated = await generateQuestionFromPaste(req.body.rawText);
+    res.json(generated);
+  } catch (err) {
+    console.error('AI generate error:', err);
+    res.status(err.message.includes('not configured') ? 503 : 400).json({ error: err.message });
   }
 });
 

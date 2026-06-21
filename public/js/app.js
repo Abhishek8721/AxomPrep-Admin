@@ -129,12 +129,104 @@ function openNew() {
   document.getElementById('questionForm').reset();
   document.getElementById('editDocId').value = '';
   document.getElementById('fieldActive').checked = true;
+  document.getElementById('aiRawInput').value = '';
+  document.getElementById('aiError').classList.add('hidden');
+  document.getElementById('aiVerifyNotice').classList.add('hidden');
+  setAiSectionVisible(true);
   openModal();
+}
+
+function setAiSectionVisible(visible) {
+  document.getElementById('aiPasteSection').classList.toggle('hidden', !visible);
+  document.getElementById('formDivider').classList.toggle('hidden', !visible);
+}
+
+function suggestNextQuestionId(category) {
+  const ids = allQuestions
+    .filter((q) => q.category === category)
+    .map((q) => Number(q.id))
+    .filter((n) => !Number.isNaN(n));
+  return ids.length ? Math.max(...ids) + 1 : 1;
+}
+
+function fillQuestionForm(data) {
+  document.getElementById('fieldCategory').value = data.category;
+  document.getElementById('fieldId').value = suggestNextQuestionId(data.category);
+  document.getElementById('fieldDifficulty').value = data.difficulty;
+  document.getElementById('fieldQuestion').value = data.question;
+  document.getElementById('fieldCorrectAnswer').value = data.correctAnswer;
+  document.getElementById('fieldExplanation').value = data.explanation;
+  (data.options || []).forEach((opt, i) => {
+    const el = document.getElementById(`opt${i}`);
+    if (el) el.value = opt;
+  });
+}
+
+function showAiVerification(data) {
+  const el = document.getElementById('aiVerifyNotice');
+  const labels = ['A', 'B', 'C', 'D'];
+  const correctLabel = labels[data.correctAnswer] || '?';
+  const method =
+    data.questionType === 'maths'
+      ? 'step-by-step maths solution'
+      : data.questionType === 'reasoning'
+        ? 'step-by-step reasoning'
+        : 'web search';
+
+  if (data.sourceAnswerWrong) {
+    el.className = 'ai-verify-notice ai-verify-warn';
+    el.textContent =
+      `⚠ Source had a wrong answer. Verified via ${method}: ${correctLabel}. ${data.verificationNote || ''}`.trim();
+  } else {
+    el.className = 'ai-verify-notice ai-verify-ok';
+    el.textContent =
+      `✓ Verified via ${method}: ${correctLabel}. ${data.verificationNote || 'Review the explanation before saving.'}`.trim();
+  }
+}
+
+async function generateWithAi() {
+  const rawText = document.getElementById('aiRawInput').value.trim();
+  const errEl = document.getElementById('aiError');
+  const verifyEl = document.getElementById('aiVerifyNotice');
+  const btn = document.getElementById('btnGenerateAi');
+
+  errEl.classList.add('hidden');
+  verifyEl.classList.add('hidden');
+  if (!rawText) {
+    errEl.textContent = 'Paste the question and options first.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Verifying with AI...';
+
+  try {
+    const generated = await api('/api/questions/generate', {
+      method: 'POST',
+      body: JSON.stringify({ rawText }),
+    });
+    fillQuestionForm(generated);
+    showAiVerification(generated);
+    const alertMsg = generated.sourceAnswerWrong
+      ? 'Wrong source answer corrected — please review before saving'
+      : 'Question generated and answer verified — review and save when ready';
+    showAlert(alertMsg, generated.sourceAnswerWrong ? 'error' : 'success');
+    document.getElementById('fieldQuestion').focus();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
 }
 
 async function openEdit(docId) {
   const q = await api(`/api/questions/${docId}`);
   document.getElementById('modalTitle').textContent = 'Edit Question';
+  setAiSectionVisible(false);
   document.getElementById('editDocId').value = docId;
   document.getElementById('fieldCategory').value = q.category;
   document.getElementById('fieldId').value = q.id;
@@ -219,6 +311,7 @@ async function toggleActive(docId) {
 
 // Event listeners
 document.getElementById('btnNew').addEventListener('click', openNew);
+document.getElementById('btnGenerateAi').addEventListener('click', generateWithAi);
 document.getElementById('btnLogout').addEventListener('click', async () => {
   await fetch('/api/logout', { method: 'POST' });
   window.location.href = '/login.html';
