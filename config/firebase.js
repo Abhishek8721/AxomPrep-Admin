@@ -52,4 +52,15 @@ function getQuestionPaperCollectionName() {
   return process.env.FIRESTORE_QUESTION_PAPERS_COLLECTION || 'question_papers';
 }
 
-module.exports = { initFirebase, getDb, getCollectionName, getQuestionPaperCollectionName, admin };
+function getExamsCollectionName() {
+  return process.env.FIRESTORE_EXAMS_COLLECTION || 'exams';
+}
+
+module.exports = {
+  initFirebase,
+  getDb,
+  getCollectionName,
+  getQuestionPaperCollectionName,
+  getExamsCollectionName,
+  admin,
+};

@@ -26,6 +26,7 @@
   <main class="container">
     <nav class="tabs">
       <button type="button" id="tabPractice" class="tab active">Practice Questions</button>
+      <button type="button" id="tabExams" class="tab">Exams</button>
       <button type="button" id="tabPapers" class="tab">Question Papers</button>
     </nav>
 
@@ -136,6 +137,67 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" data-close>Cancel</button>
           <button type="submit" class="btn btn-primary" id="btnSave">Save Question</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Exam Create / Edit Modal -->
+  <div id="examModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-exam></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="examModalTitle">New Exam</h2>
+        <button class="btn-icon" data-close-exam>&times;</button>
+      </div>
+      <form id="examForm">
+        <input type="hidden" id="editExamDocId" />
+        <div class="form-row">
+          <label>
+            Exam ID *
+            <input type="text" id="fieldExamId" required placeholder="e.g. adre_grade3_2024" pattern="[a-z0-9_]+" />
+          </label>
+          <label>
+            Year
+            <input type="number" id="fieldExamYear" min="1990" max="2100" placeholder="2024" />
+          </label>
+        </div>
+        <label>
+          Title *
+          <input type="text" id="fieldExamTitle" required placeholder="e.g. ADRE Grade 3 2024" />
+        </label>
+        <div class="form-row">
+          <label>
+            Exam Type *
+            <select id="fieldExamType" required></select>
+          </label>
+          <label>
+            Duration *
+            <input type="text" id="fieldExamDuration" required placeholder="60 min" value="60 min" />
+          </label>
+          <label>
+            Icon
+            <input type="text" id="fieldExamIcon" placeholder="📋" value="📋" />
+          </label>
+        </div>
+        <label>
+          Description *
+          <textarea id="fieldExamDescription" rows="2" required placeholder="Short description shown in the app"></textarea>
+        </label>
+        <div class="form-row">
+          <label>
+            Sort Order
+            <input type="number" id="fieldExamSortOrder" min="0" value="0" />
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="fieldExamActive" checked />
+            Active (visible in app)
+          </label>
+        </div>
+        <p id="examFormError" class="error-msg hidden"></p>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close-exam>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Exam</button>
         </div>
       </form>
     </div>

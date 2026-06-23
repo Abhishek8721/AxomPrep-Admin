@@ -1,30 +1,24 @@
-const PAPERS = [
-  { id: 'adre', label: 'ADRE', icon: '📋' },
-  { id: 'ssc_gd', label: 'SSC GD', icon: '🛡️' },
-  { id: 'assam_police', label: 'Assam Police', icon: '👮' },
-];
-
 const DIFFICULTIES = ['Easy', 'Medium', 'Hard'];
 
-function buildDocId(paper, id) {
-  return `${paper}_${id}`;
+function buildDocId(examId, id) {
+  return `${examId}_${id}`;
 }
 
 function parseDocId(docId) {
-  const idx = docId.lastIndexOf('_');
-  if (idx === -1) return { paper: '', id: docId };
-  return {
-    paper: docId.slice(0, idx),
-    id: docId.slice(idx + 1),
-  };
+  const match = docId.match(/^(.+)_(\d+)$/);
+  if (!match) return { examId: docId, id: '' };
+  return { examId: match[1], id: match[2] };
 }
 
-function validateQuestionPaper(body) {
+function validateQuestionPaper(body, knownExamIds = []) {
   const errors = [];
-  const { id, paper, question, options, correctAnswer, explanation, difficulty } = body;
+  const { id, examId, paper, question, options, correctAnswer, explanation, difficulty } = body;
+  const resolvedExamId = examId || paper;
 
-  if (!paper || !PAPERS.some((p) => p.id === paper)) {
-    errors.push('Valid paper is required (adre, ssc_gd, assam_police)');
+  if (!resolvedExamId || !String(resolvedExamId).trim()) {
+    errors.push('Exam is required');
+  } else if (knownExamIds.length && !knownExamIds.includes(resolvedExamId)) {
+    errors.push('Selected exam does not exist — create it in the Exams tab first');
   }
   if (id === undefined || id === null || Number.isNaN(Number(id))) {
     errors.push('Numeric id is required');
@@ -52,9 +46,10 @@ function validateQuestionPaper(body) {
 }
 
 function toFirestorePayload(body) {
+  const examId = body.examId || body.paper;
   return {
     id: Number(body.id),
-    paper: body.paper,
+    examId,
     question: String(body.question).trim(),
     options: body.options.map((o) => String(o).trim()),
     correctAnswer: Number(body.correctAnswer),
@@ -67,15 +62,16 @@ function toFirestorePayload(body) {
 
 function fromFirestoreDoc(doc) {
   const data = doc.data();
+  const parsed = parseDocId(doc.id);
   return {
     docId: doc.id,
     ...data,
-    id: data.id ?? Number(parseDocId(doc.id).id),
+    examId: data.examId ?? data.paper ?? parsed.examId,
+    id: data.id ?? Number(parsed.id),
   };
 }
 
 module.exports = {
-  PAPERS,
   DIFFICULTIES,
   buildDocId,
   parseDocId,
