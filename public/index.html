@@ -24,6 +24,11 @@
   </header>
 
   <main class="container">
+    <nav class="tabs">
+      <button type="button" id="tabPractice" class="tab active">Practice Questions</button>
+      <button type="button" id="tabPapers" class="tab">Question Papers</button>
+    </nav>
+
     <section class="toolbar">
       <div class="filters">
         <select id="filterCategory">
@@ -47,7 +52,7 @@
         <thead>
           <tr>
             <th>ID</th>
-            <th>Category</th>
+            <th id="thGroup">Category</th>
             <th>Question</th>
             <th>Difficulty</th>
             <th>Answer</th>
@@ -88,7 +93,7 @@
         <hr class="form-divider" id="formDivider" />
         <div class="form-row">
           <label>
-            Category *
+            <span id="fieldGroupLabel">Category *</span>
             <select id="fieldCategory" required></select>
           </label>
           <label>

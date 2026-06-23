@@ -87,6 +87,30 @@ body {
 
 .container { max-width: 1280px; margin: 0 auto; padding: 24px; }
 
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.tab {
+  padding: 10px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.tab.active {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+
 /* Toolbar */
 .toolbar {
   display: flex;

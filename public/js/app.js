@@ -1,6 +1,19 @@
-let meta = { categories: [], difficulties: [] };
+let meta = { categories: [], papers: [], difficulties: [] };
 let allQuestions = [];
 let deleteTarget = null;
+let currentMode = 'practice'; // 'practice' | 'papers'
+
+function apiBase() {
+  return currentMode === 'papers' ? '/api/question-papers' : '/api/questions';
+}
+
+function groupField() {
+  return currentMode === 'papers' ? 'paper' : 'category';
+}
+
+function groupOptions() {
+  return currentMode === 'papers' ? meta.papers : meta.categories;
+}
 
 async function api(url, options = {}) {
   const res = await fetch(url, {
@@ -29,9 +42,30 @@ function difficultyClass(d) {
   return 'badge-medium';
 }
 
-function categoryLabel(id) {
-  const cat = meta.categories.find((c) => c.id === id);
-  return cat ? `${cat.icon} ${cat.label}` : id;
+function groupLabel(id) {
+  const item = groupOptions().find((c) => c.id === id);
+  return item ? `${item.icon} ${item.label}` : id;
+}
+
+function updateModeUi() {
+  const isPapers = currentMode === 'papers';
+  const filterSelect = document.getElementById('filterCategory');
+  const fieldCat = document.getElementById('fieldCategory');
+  const filterLabel = isPapers ? 'All Papers' : 'All Categories';
+  const groupLabelText = isPapers ? 'Paper' : 'Category';
+
+  document.getElementById('tabPractice').classList.toggle('active', !isPapers);
+  document.getElementById('tabPapers').classList.toggle('active', isPapers);
+  document.getElementById('thGroup').textContent = groupLabelText;
+  document.getElementById('fieldGroupLabel').textContent = `${groupLabelText} *`;
+  document.getElementById('aiPasteSection').classList.toggle('hidden', isPapers);
+
+  filterSelect.innerHTML = `<option value="">${filterLabel}</option>`;
+  fieldCat.innerHTML = '';
+  groupOptions().forEach((c) => {
+    filterSelect.innerHTML += `<option value="${c.id}">${c.icon} ${c.label}</option>`;
+    fieldCat.innerHTML += `<option value="${c.id}">${c.icon} ${c.label}</option>`;
+  });
 }
 
 async function checkAuth() {
@@ -45,27 +79,22 @@ async function checkAuth() {
 
 async function loadMeta() {
   meta = await api('/api/meta');
-  const catSelect = document.getElementById('filterCategory');
-  const fieldCat = document.getElementById('fieldCategory');
   const fieldDiff = document.getElementById('fieldDifficulty');
-
-  meta.categories.forEach((c) => {
-    catSelect.innerHTML += `<option value="${c.id}">${c.icon} ${c.label}</option>`;
-    fieldCat.innerHTML += `<option value="${c.id}">${c.icon} ${c.label}</option>`;
-  });
+  fieldDiff.innerHTML = '';
   meta.difficulties.forEach((d) => {
     fieldDiff.innerHTML += `<option value="${d}">${d}</option>`;
   });
+  updateModeUi();
 }
 
 async function loadQuestions() {
-  const category = document.getElementById('filterCategory').value;
+  const group = document.getElementById('filterCategory').value;
   const params = new URLSearchParams();
-  if (category) params.set('category', category);
+  if (group) params.set(groupField(), group);
   const search = document.getElementById('searchInput').value.trim();
   if (search) params.set('search', search);
 
-  const data = await api(`/api/questions?${params}`);
+  const data = await api(`${apiBase()}?${params}`);
   allQuestions = data.questions;
 
   const diffFilter = document.getElementById('filterDifficulty').value;
@@ -81,10 +110,12 @@ async function loadQuestions() {
 function renderTable(questions) {
   const tbody = document.getElementById('questionsBody');
   if (!questions.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty">No questions found. Click "+ New Question" to add one.</td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="7" class="empty">No questions found. Click "+ New Question" to add one.</td></tr>';
     return;
   }
 
+  const field = groupField();
   tbody.innerHTML = questions
     .map((q) => {
       const answerLabel = ['A', 'B', 'C', 'D'][q.correctAnswer] || '?';
@@ -92,7 +123,7 @@ function renderTable(questions) {
       return `
         <tr>
           <td><strong>${q.id}</strong><br><small style="color:var(--muted)">${q.docId}</small></td>
-          <td><span class="badge badge-cat">${categoryLabel(q.category)}</span></td>
+          <td><span class="badge badge-cat">${groupLabel(q[field])}</span></td>
           <td class="q-text" title="${escapeHtml(q.question)}">${escapeHtml(q.question)}</td>
           <td><span class="badge ${difficultyClass(q.difficulty)}">${q.difficulty}</span></td>
           <td>${answerLabel}</td>
@@ -132,7 +163,7 @@ function openNew() {
   document.getElementById('aiRawInput').value = '';
   document.getElementById('aiError').classList.add('hidden');
   document.getElementById('aiVerifyNotice').classList.add('hidden');
-  setAiSectionVisible(true);
+  setAiSectionVisible(currentMode === 'practice');
   openModal();
 }
 
@@ -141,17 +172,18 @@ function setAiSectionVisible(visible) {
   document.getElementById('formDivider').classList.toggle('hidden', !visible);
 }
 
-function suggestNextQuestionId(category) {
+function suggestNextQuestionId(group) {
+  const field = groupField();
   const ids = allQuestions
-    .filter((q) => q.category === category)
+    .filter((q) => q[field] === group)
     .map((q) => Number(q.id))
     .filter((n) => !Number.isNaN(n));
   return ids.length ? Math.max(...ids) + 1 : 1;
 }
 
 function fillQuestionForm(data) {
-  document.getElementById('fieldCategory').value = data.category;
-  document.getElementById('fieldId').value = suggestNextQuestionId(data.category);
+  document.getElementById('fieldCategory').value = data.category || data.paper;
+  document.getElementById('fieldId').value = suggestNextQuestionId(data.category || data.paper);
   document.getElementById('fieldDifficulty').value = data.difficulty;
   document.getElementById('fieldQuestion').value = data.question;
   document.getElementById('fieldCorrectAnswer').value = data.correctAnswer;
@@ -224,11 +256,11 @@ async function generateWithAi() {
 }
 
 async function openEdit(docId) {
-  const q = await api(`/api/questions/${docId}`);
+  const q = await api(`${apiBase()}/${docId}`);
   document.getElementById('modalTitle').textContent = 'Edit Question';
   setAiSectionVisible(false);
   document.getElementById('editDocId').value = docId;
-  document.getElementById('fieldCategory').value = q.category;
+  document.getElementById('fieldCategory').value = q.category || q.paper;
   document.getElementById('fieldId').value = q.id;
   document.getElementById('fieldDifficulty').value = q.difficulty;
   document.getElementById('fieldQuestion').value = q.question;
@@ -247,8 +279,8 @@ async function saveQuestion(e) {
   const errEl = document.getElementById('formError');
   errEl.classList.add('hidden');
 
+  const groupValue = document.getElementById('fieldCategory').value;
   const payload = {
-    category: document.getElementById('fieldCategory').value,
     id: Number(document.getElementById('fieldId').value),
     difficulty: document.getElementById('fieldDifficulty').value,
     question: document.getElementById('fieldQuestion').value,
@@ -258,13 +290,19 @@ async function saveQuestion(e) {
     active: document.getElementById('fieldActive').checked,
   };
 
+  if (currentMode === 'papers') {
+    payload.paper = groupValue;
+  } else {
+    payload.category = groupValue;
+  }
+
   try {
     const docId = document.getElementById('editDocId').value;
     if (docId) {
-      await api(`/api/questions/${docId}`, { method: 'PUT', body: JSON.stringify(payload) });
+      await api(`${apiBase()}/${docId}`, { method: 'PUT', body: JSON.stringify(payload) });
       showAlert('Question updated successfully');
     } else {
-      await api('/api/questions', { method: 'POST', body: JSON.stringify(payload) });
+      await api(apiBase(), { method: 'POST', body: JSON.stringify(payload) });
       showAlert('Question created successfully');
     }
     closeModal();
@@ -290,7 +328,7 @@ function closeDeleteModal() {
 async function confirmDelete() {
   if (!deleteTarget) return;
   try {
-    await api(`/api/questions/${deleteTarget}`, { method: 'DELETE' });
+    await api(`${apiBase()}/${deleteTarget}`, { method: 'DELETE' });
     showAlert('Question deleted');
     closeDeleteModal();
     loadQuestions();
@@ -301,7 +339,7 @@ async function confirmDelete() {
 
 async function toggleActive(docId) {
   try {
-    const result = await api(`/api/questions/${docId}/toggle`, { method: 'PATCH' });
+    const result = await api(`${apiBase()}/${docId}/toggle`, { method: 'PATCH' });
     showAlert(result.active ? 'Question is now visible' : 'Question hidden from app');
     loadQuestions();
   } catch (err) {
@@ -309,9 +347,20 @@ async function toggleActive(docId) {
   }
 }
 
+function switchMode(mode) {
+  if (currentMode === mode) return;
+  currentMode = mode;
+  document.getElementById('filterCategory').value = '';
+  document.getElementById('searchInput').value = '';
+  updateModeUi();
+  loadQuestions();
+}
+
 // Event listeners
 document.getElementById('btnNew').addEventListener('click', openNew);
 document.getElementById('btnGenerateAi').addEventListener('click', generateWithAi);
+document.getElementById('tabPractice').addEventListener('click', () => switchMode('practice'));
+document.getElementById('tabPapers').addEventListener('click', () => switchMode('papers'));
 document.getElementById('btnLogout').addEventListener('click', async () => {
   await fetch('/api/logout', { method: 'POST' });
   window.location.href = '/login.html';

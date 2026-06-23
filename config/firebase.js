@@ -48,4 +48,8 @@ function getCollectionName() {
   return process.env.FIRESTORE_COLLECTION || 'questions';
 }
 
-module.exports = { initFirebase, getDb, getCollectionName, admin };
+function getQuestionPaperCollectionName() {
+  return process.env.FIRESTORE_QUESTION_PAPERS_COLLECTION || 'question_papers';
+}
+
+module.exports = { initFirebase, getDb, getCollectionName, getQuestionPaperCollectionName, admin };
