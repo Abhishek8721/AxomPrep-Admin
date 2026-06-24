@@ -390,6 +390,18 @@ function getGeneratePrompt(questionType) {
   return GENERATE_FACTUAL_PROMPT;
 }
 
+/** Randomly reorder options and update correctAnswer to the new slot. */
+function shuffleOptions(options, correctAnswer) {
+  const indexed = options.map((text, index) => ({ text, index }));
+  for (let i = indexed.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indexed[i], indexed[j]] = [indexed[j], indexed[i]];
+  }
+  const shuffled = indexed.map((item) => item.text);
+  const newCorrectAnswer = indexed.findIndex((item) => item.index === correctAnswer);
+  return { options: shuffled, correctAnswer: newCorrectAnswer };
+}
+
 function alignGeneratedAnswer(generated, verified) {
   const correctLabel = verified.options[verified.correctAnswer];
   const genCorrectText = generated.options?.[Number(generated.correctAnswer)] || '';
@@ -454,6 +466,10 @@ async function generateQuestionFromPaste(rawText, category) {
 
   alignGeneratedAnswer(generated, verified);
   generated.category = selectedCategory;
+
+  const shuffled = shuffleOptions(generated.options, Number(generated.correctAnswer));
+  generated.options = shuffled.options;
+  generated.correctAnswer = shuffled.correctAnswer;
 
   return validateGenerated(generated, verified);
 }
