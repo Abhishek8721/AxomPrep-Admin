@@ -20,15 +20,17 @@ function parseDocId(docId) {
   };
 }
 
-function validateQuestion(body) {
+function validateQuestion(body, { isCreate = false } = {}) {
   const errors = [];
   const { id, category, question, options, correctAnswer, explanation, difficulty } = body;
 
   if (!category || !CATEGORIES.some((c) => c.id === category)) {
     errors.push('Valid category is required');
   }
-  if (id === undefined || id === null || Number.isNaN(Number(id))) {
+  if (!isCreate && (id === undefined || id === null || Number.isNaN(Number(id)))) {
     errors.push('Numeric id is required');
+  } else if (isCreate && id !== undefined && id !== null && id !== '' && Number.isNaN(Number(id))) {
+    errors.push('Numeric id must be a valid number');
   }
   if (!question || !String(question).trim()) {
     errors.push('Question text is required');

@@ -10,7 +10,7 @@ function parseDocId(docId) {
   return { examId: match[1], id: match[2] };
 }
 
-function validateQuestionPaper(body, knownExamIds = []) {
+function validateQuestionPaper(body, knownExamIds = [], { isCreate = false } = {}) {
   const errors = [];
   const { id, examId, paper, question, options, correctAnswer, explanation, difficulty } = body;
   const resolvedExamId = examId || paper;
@@ -20,8 +20,10 @@ function validateQuestionPaper(body, knownExamIds = []) {
   } else if (knownExamIds.length && !knownExamIds.includes(resolvedExamId)) {
     errors.push('Selected exam does not exist — create it in the Exams tab first');
   }
-  if (id === undefined || id === null || Number.isNaN(Number(id))) {
+  if (!isCreate && (id === undefined || id === null || Number.isNaN(Number(id)))) {
     errors.push('Numeric id is required');
+  } else if (isCreate && id !== undefined && id !== null && id !== '' && Number.isNaN(Number(id))) {
+    errors.push('Numeric id must be a valid number');
   }
   if (!question || !String(question).trim()) {
     errors.push('Question text is required');

@@ -97,9 +97,9 @@
             <span id="fieldGroupLabel">Category *</span>
             <select id="fieldCategory" required></select>
           </label>
-          <label>
-            Question ID *
-            <input type="number" id="fieldId" min="1" required placeholder="e.g. 1, 101, 201" />
+          <label id="fieldIdRow" class="hidden">
+            Question ID
+            <input type="text" id="fieldId" readonly tabindex="-1" />
           </label>
           <label>
             Difficulty *

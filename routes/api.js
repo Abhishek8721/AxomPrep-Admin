@@ -27,6 +27,11 @@ const {
 } = require('../utils/questionPapers');
 const { requireAuth } = require('../middleware/auth');
 const { generateQuestionFromPaste } = require('../utils/ai');
+const {
+  getNextQuestionId,
+  getNextPaperQuestionId,
+  resolveQuestionId,
+} = require('../utils/nextQuestionId');
 
 const router = express.Router();
 
@@ -117,17 +122,20 @@ router.post('/questions/generate', async (req, res) => {
 
 /** POST /api/questions — create */
 router.post('/questions', async (req, res) => {
-  const errors = validateQuestion(req.body);
+  const errors = validateQuestion(req.body, { isCreate: true });
   if (errors.length) {
     return res.status(400).json({ error: errors.join(', ') });
   }
 
-  const docId = buildDocId(req.body.category, req.body.id);
-  const payload = toFirestorePayload(req.body);
-  payload.createdAt = new Date().toISOString();
-
   try {
-    const ref = getDb().collection(getCollectionName()).doc(docId);
+    const col = getDb().collection(getCollectionName());
+    const nextId = await getNextQuestionId(col, 'category', req.body.category);
+    const questionId = resolveQuestionId(req.body, nextId);
+    const docId = buildDocId(req.body.category, questionId);
+    const payload = toFirestorePayload({ ...req.body, id: questionId });
+    payload.createdAt = new Date().toISOString();
+
+    const ref = col.doc(docId);
     const existing = await ref.get();
     if (existing.exists) {
       return res.status(409).json({ error: `Question ${docId} already exists` });
@@ -136,7 +144,7 @@ router.post('/questions', async (req, res) => {
     res.status(201).json({ docId, ...payload });
   } catch (err) {
     console.error('Create error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.message.includes('Numeric id') ? 400 : 500).json({ error: err.message });
   }
 });
 
@@ -269,18 +277,22 @@ router.get('/question-papers/:docId', async (req, res) => {
 /** POST /api/question-papers — create */
 router.post('/question-papers', async (req, res) => {
   const knownExamIds = await getKnownExamIds();
-  const errors = validateQuestionPaper(req.body, knownExamIds);
+  const errors = validateQuestionPaper(req.body, knownExamIds, { isCreate: true });
   if (errors.length) {
     return res.status(400).json({ error: errors.join(', ') });
   }
 
   const examId = req.body.examId || req.body.paper;
-  const docId = buildPaperDocId(examId, req.body.id);
-  const payload = toPaperPayload(req.body);
-  payload.createdAt = new Date().toISOString();
 
   try {
-    const ref = getDb().collection(getQuestionPaperCollectionName()).doc(docId);
+    const col = getDb().collection(getQuestionPaperCollectionName());
+    const nextId = await getNextPaperQuestionId(col, examId);
+    const questionId = resolveQuestionId(req.body, nextId);
+    const docId = buildPaperDocId(examId, questionId);
+    const payload = toPaperPayload({ ...req.body, examId, id: questionId });
+    payload.createdAt = new Date().toISOString();
+
+    const ref = col.doc(docId);
     const existing = await ref.get();
     if (existing.exists) {
       return res.status(409).json({ error: `Question ${docId} already exists` });
@@ -289,7 +301,7 @@ router.post('/question-papers', async (req, res) => {
     res.status(201).json({ docId, ...payload });
   } catch (err) {
     console.error('Create question paper error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.message.includes('Numeric id') ? 400 : 500).json({ error: err.message });
   }
 });
 

@@ -286,6 +286,7 @@ function openNew() {
   document.getElementById('aiRawInput').value = '';
   document.getElementById('aiError').classList.add('hidden');
   document.getElementById('aiVerifyNotice').classList.add('hidden');
+  setQuestionIdField(false);
   setAiSectionVisible(currentMode === 'practice');
   openModal();
 }
@@ -306,20 +307,14 @@ function setAiSectionVisible(visible) {
   document.getElementById('formDivider').classList.toggle('hidden', !visible);
 }
 
-function suggestNextQuestionId(group) {
-  const field = groupField();
-  const ids = allQuestions
-    .filter((q) => q[field] === group)
-    .map((q) => Number(q.id))
-    .filter((n) => !Number.isNaN(n));
-  return ids.length ? Math.max(...ids) + 1 : 1;
+function setQuestionIdField(visible, value) {
+  const row = document.getElementById('fieldIdRow');
+  row.classList.toggle('hidden', !visible);
+  if (value != null) document.getElementById('fieldId').value = value;
 }
 
 function fillQuestionForm(data) {
   document.getElementById('fieldCategory').value = data.category || data.examId || data.paper;
-  document.getElementById('fieldId').value = suggestNextQuestionId(
-    data.category || data.examId || data.paper
-  );
   document.getElementById('fieldDifficulty').value = data.difficulty;
   document.getElementById('fieldQuestion').value = data.question;
   document.getElementById('fieldCorrectAnswer').value = data.correctAnswer;
@@ -397,7 +392,7 @@ async function openEdit(docId) {
   setAiSectionVisible(false);
   document.getElementById('editDocId').value = docId;
   document.getElementById('fieldCategory').value = q.category || q.examId || q.paper;
-  document.getElementById('fieldId').value = q.id;
+  setQuestionIdField(true, q.id);
   document.getElementById('fieldDifficulty').value = q.difficulty;
   document.getElementById('fieldQuestion').value = q.question;
   document.getElementById('fieldCorrectAnswer').value = q.correctAnswer;
@@ -432,8 +427,8 @@ async function saveQuestion(e) {
   errEl.classList.add('hidden');
 
   const groupValue = document.getElementById('fieldCategory').value;
+  const docId = document.getElementById('editDocId').value;
   const payload = {
-    id: Number(document.getElementById('fieldId').value),
     difficulty: document.getElementById('fieldDifficulty').value,
     question: document.getElementById('fieldQuestion').value,
     options: [0, 1, 2, 3].map((i) => document.getElementById(`opt${i}`).value),
@@ -442,6 +437,10 @@ async function saveQuestion(e) {
     active: document.getElementById('fieldActive').checked,
   };
 
+  if (docId) {
+    payload.id = Number(document.getElementById('fieldId').value);
+  }
+
   if (currentMode === 'papers') {
     payload.examId = groupValue;
   } else {
@@ -449,7 +448,6 @@ async function saveQuestion(e) {
   }
 
   try {
-    const docId = document.getElementById('editDocId').value;
     if (docId) {
       await api(`${apiBase()}/${docId}`, { method: 'PUT', body: JSON.stringify(payload) });
       showAlert('Question updated successfully');
