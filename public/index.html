@@ -78,20 +78,6 @@
       </div>
       <form id="questionForm">
         <input type="hidden" id="editDocId" />
-        <section id="aiPasteSection" class="ai-paste-section">
-          <div class="ai-paste-header">
-            <h3>Generate by AI</h3>
-            <p>Paste a question and options from any website. GK uses web search; maths and reasoning are solved step-by-step with a full explanation.</p>
-          </div>
-          <label>
-            Paste source question
-            <textarea id="aiRawInput" rows="5" placeholder="Who is known as the Bard of Brahmaputra?&#10;A) Lakshminath Bezbaroa&#10;B) Homen Borgohain&#10;C) ...&#10;Answer: B"></textarea>
-          </label>
-          <p id="aiVerifyNotice" class="ai-verify-notice hidden"></p>
-          <p id="aiError" class="error-msg hidden"></p>
-          <button type="button" class="btn btn-outline" id="btnGenerateAi">✨ Generate with AI</button>
-        </section>
-        <hr class="form-divider" id="formDivider" />
         <div class="form-row">
           <label>
             <span id="fieldGroupLabel">Category *</span>
@@ -106,6 +92,20 @@
             <select id="fieldDifficulty" required></select>
           </label>
         </div>
+        <section id="aiPasteSection" class="ai-paste-section">
+          <div class="ai-paste-header">
+            <h3>Generate by AI</h3>
+            <p>Select category above first, then paste a question. Assam GK &amp; English use web search; Maths &amp; Reasoning use step-by-step solving.</p>
+          </div>
+          <label>
+            Paste source question
+            <textarea id="aiRawInput" rows="5" placeholder="Who is known as the Bard of Brahmaputra?&#10;A) Lakshminath Bezbaroa&#10;B) Homen Borgohain&#10;C) ...&#10;Answer: B"></textarea>
+          </label>
+          <p id="aiVerifyNotice" class="ai-verify-notice hidden"></p>
+          <p id="aiError" class="error-msg hidden"></p>
+          <button type="button" class="btn btn-outline" id="btnGenerateAi">✨ Generate with AI</button>
+        </section>
+        <hr class="form-divider" id="formDivider" />
         <label>
           Question *
           <textarea id="fieldQuestion" rows="3" required placeholder="Enter the question text"></textarea>

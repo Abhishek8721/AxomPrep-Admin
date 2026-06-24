@@ -112,7 +112,7 @@ router.get('/questions/:docId', async (req, res) => {
 /** POST /api/questions/generate — rephrase pasted MCQ with AI */
 router.post('/questions/generate', async (req, res) => {
   try {
-    const generated = await generateQuestionFromPaste(req.body.rawText);
+    const generated = await generateQuestionFromPaste(req.body.rawText, req.body.category);
     res.json(generated);
   } catch (err) {
     console.error('AI generate error:', err);

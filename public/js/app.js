@@ -313,8 +313,10 @@ function setQuestionIdField(visible, value) {
   if (value != null) document.getElementById('fieldId').value = value;
 }
 
-function fillQuestionForm(data) {
-  document.getElementById('fieldCategory').value = data.category || data.examId || data.paper;
+function fillQuestionForm(data, { keepCategory = false } = {}) {
+  if (!keepCategory && (data.category || data.examId || data.paper)) {
+    document.getElementById('fieldCategory').value = data.category || data.examId || data.paper;
+  }
   document.getElementById('fieldDifficulty').value = data.difficulty;
   document.getElementById('fieldQuestion').value = data.question;
   document.getElementById('fieldCorrectAnswer').value = data.correctAnswer;
@@ -365,12 +367,19 @@ async function generateWithAi() {
   btn.disabled = true;
   btn.textContent = 'Verifying with AI...';
 
+  const category = document.getElementById('fieldCategory').value;
+  if (!category) {
+    errEl.textContent = 'Select a category first.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
   try {
     const generated = await api('/api/questions/generate', {
       method: 'POST',
-      body: JSON.stringify({ rawText }),
+      body: JSON.stringify({ rawText, category }),
     });
-    fillQuestionForm(generated);
+    fillQuestionForm(generated, { keepCategory: true });
     showAiVerification(generated);
     const alertMsg = generated.sourceAnswerWrong
       ? 'Wrong source answer corrected — please review before saving'

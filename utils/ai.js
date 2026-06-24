@@ -4,6 +4,20 @@ const { searchForAnswer } = require('./webSearch');
 
 const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
 
+function resolveCategory(category) {
+  const id = String(category || '').trim();
+  if (!id || !CATEGORY_IDS.includes(id)) {
+    throw new Error(`Valid category is required (${CATEGORY_IDS.join(', ')})`);
+  }
+  return id;
+}
+
+function categoryToQuestionType(category) {
+  if (category === 'maths') return 'maths';
+  if (category === 'reasoning') return 'reasoning';
+  return 'factual';
+}
+
 function getAzureConfig() {
   const apiKey = process.env.AZURE_OPENAI_API_KEY;
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
@@ -308,7 +322,7 @@ function validateGenerated(data, verified) {
   };
 }
 
-async function verifyByWebSearch(rawText, parsedOptions) {
+async function verifyByWebSearch(rawText, parsedOptions, category) {
   const { queries, results, promptText } = await searchForAnswer(rawText, parsedOptions);
 
   const verified = await callAzure(
@@ -316,7 +330,7 @@ async function verifyByWebSearch(rawText, parsedOptions) {
       { role: 'system', content: VERIFY_FACTUAL_PROMPT },
       {
         role: 'user',
-        content: `PASTED MCQ:\n${rawText}\n\nWEB SEARCH QUERIES: ${queries.join(' | ')}\n\nWEB SEARCH RESULTS:\n${promptText}`,
+        content: `SELECTED CATEGORY (must use in response): ${category}\n\nPASTED MCQ:\n${rawText}\n\nWEB SEARCH QUERIES: ${queries.join(' | ')}\n\nWEB SEARCH RESULTS:\n${promptText}`,
       },
     ],
     { temperature: 0.1, maxTokens: 1000 }
@@ -326,6 +340,8 @@ async function verifyByWebSearch(rawText, parsedOptions) {
     throw new Error('Could not parse four options from pasted text');
   }
 
+  verified.category = category;
+
   return buildVerifiedResult(rawText, verified, {
     source: results.length ? 'web' : 'ai',
     questionType: 'factual',
@@ -333,13 +349,13 @@ async function verifyByWebSearch(rawText, parsedOptions) {
   });
 }
 
-async function verifyBySolving(rawText, questionType) {
+async function verifyBySolving(rawText, questionType, category) {
   const prompt = questionType === 'maths' ? VERIFY_MATHS_PROMPT : VERIFY_REASONING_PROMPT;
 
   const verified = await callAzure(
     [
       { role: 'system', content: prompt },
-      { role: 'user', content: `PASTED MCQ:\n${rawText}` },
+      { role: 'user', content: `SELECTED CATEGORY: ${category}\n\nPASTED MCQ:\n${rawText}` },
     ],
     { temperature: 0.05, maxTokens: 1500 }
   );
@@ -348,6 +364,8 @@ async function verifyBySolving(rawText, questionType) {
     throw new Error('Could not parse four options from pasted text');
   }
 
+  verified.category = category;
+
   return buildVerifiedResult(rawText, verified, {
     source: 'solve',
     questionType,
@@ -355,15 +373,15 @@ async function verifyBySolving(rawText, questionType) {
   });
 }
 
-async function verifyAnswer(rawText) {
+async function verifyAnswer(rawText, category) {
   const parsedOptions = extractOptions(rawText);
-  const questionType = detectQuestionType(rawText, parsedOptions);
+  const questionType = categoryToQuestionType(category);
 
   if (questionType === 'maths' || questionType === 'reasoning') {
-    return verifyBySolving(rawText, questionType);
+    return verifyBySolving(rawText, questionType, category);
   }
 
-  return verifyByWebSearch(rawText, parsedOptions);
+  return verifyByWebSearch(rawText, parsedOptions, category);
 }
 
 function getGeneratePrompt(questionType) {
@@ -400,18 +418,18 @@ function alignGeneratedAnswer(generated, verified) {
     generated.explanation = verified.explanation;
   }
 
-  if (verified.category && CATEGORY_IDS.includes(verified.category)) {
-    generated.category = verified.category;
-  }
+  generated.category = verified.category;
 }
 
-async function generateQuestionFromPaste(rawText) {
+async function generateQuestionFromPaste(rawText, category) {
   const text = String(rawText || '').trim();
   if (!text) {
     throw new Error('Paste the question text and options first');
   }
 
-  const verified = await verifyAnswer(text);
+  const selectedCategory = resolveCategory(category);
+  const verified = await verifyAnswer(text, selectedCategory);
+  verified.category = selectedCategory;
   const correctLabel = verified.options[verified.correctAnswer];
   const generatePrompt = getGeneratePrompt(verified.questionType);
 
@@ -435,6 +453,7 @@ async function generateQuestionFromPaste(rawText) {
   );
 
   alignGeneratedAnswer(generated, verified);
+  generated.category = selectedCategory;
 
   return validateGenerated(generated, verified);
 }
