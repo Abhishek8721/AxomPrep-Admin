@@ -426,7 +426,7 @@ router.post('/question-papers/parse-pdf', (req, res, next) => {
 /** POST /api/question-papers/process-question — auto-detect type, verify answer & explanation */
 router.post('/question-papers/process-question', async (req, res) => {
   try {
-    const generated = await generatePaperQuestion(req.body.rawText);
+    const generated = await generatePaperQuestion(req.body);
     res.json(generated);
   } catch (err) {
     console.error('Process question error:', err);

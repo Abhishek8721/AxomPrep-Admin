@@ -1,5 +1,5 @@
 const { CATEGORIES, DIFFICULTIES } = require('./questions');
-const { extractOptions, detectQuestionType, extractQuestion } = require('./questionParse');
+const { extractOptions, detectQuestionType, extractQuestion, resolvePaperFields, formatRawText } = require('./questionParse');
 const { searchForAnswer } = require('./webSearch');
 
 const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
@@ -526,24 +526,19 @@ async function pickPaperDifficulty(rawText, questionType) {
   return DIFFICULTIES.includes(result.difficulty) ? result.difficulty : 'Medium';
 }
 
-async function generatePaperQuestion(rawText) {
-  const text = String(rawText || '').trim();
-  if (!text) {
-    throw new Error('Question text is required');
-  }
-
-  const parsedOptions = extractOptions(text);
-  const originalQuestion = extractQuestion(text);
+async function generatePaperQuestion(input) {
+  const { question: originalQuestion, options: originalOptions, rawText } =
+    resolvePaperFields(input);
 
   if (!originalQuestion) {
     throw new Error('Could not parse question text');
   }
-  if (!parsedOptions || parsedOptions.length !== 4) {
+  if (!originalOptions || originalOptions.length !== 4) {
     throw new Error('Could not parse four options');
   }
 
-  const originalOptions = parsedOptions.map((o) => String(o).trim());
-  const { questionType, category } = detectCategoryAuto(text, parsedOptions);
+  const text = rawText || formatRawText(originalQuestion, originalOptions);
+  const { questionType, category } = detectCategoryAuto(text, originalOptions);
 
   const verified = await verifyAnswer(text, category);
   verified.questionType = questionType;

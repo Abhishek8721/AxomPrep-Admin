@@ -258,7 +258,11 @@ async function processPdfQuestions() {
     try {
       const result = await api('/api/question-papers/process-question', {
         method: 'POST',
-        body: JSON.stringify({ rawText: q.rawText }),
+        body: JSON.stringify({
+          rawText: q.rawText,
+          question: q.question,
+          options: q.options,
+        }),
       });
       Object.assign(q, {
         question: result.question,

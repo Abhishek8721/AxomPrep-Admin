@@ -123,7 +123,7 @@ function normalizeExtracted(items) {
       number: Number(item.number) || out.length + 1,
       question: String(item.question).trim(),
       options,
-      rawText: item.rawText?.trim() || formatRawText(item.question, options),
+      rawText: formatRawText(item.question, options),
     });
   }
 
