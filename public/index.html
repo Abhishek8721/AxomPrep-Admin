@@ -18,6 +18,7 @@
       </div>
     </div>
     <div class="header-actions">
+      <button id="btnUploadPdf" class="btn btn-outline hidden">📄 Upload PDF</button>
       <button id="btnNew" class="btn btn-primary">+ New Question</button>
       <button id="btnLogout" class="btn btn-outline">Logout</button>
     </div>
@@ -200,6 +201,67 @@
           <button type="submit" class="btn btn-primary">Save Exam</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- PDF Upload Modal -->
+  <div id="pdfUploadModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-pdf-upload></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Upload Question Paper PDF</h2>
+        <button class="btn-icon" data-close-pdf-upload>&times;</button>
+      </div>
+      <form id="pdfUploadForm">
+        <label>
+          Exam *
+          <select id="pdfExamId" required></select>
+        </label>
+        <label>
+          Subject (for AI verification) *
+          <select id="pdfSubject" required></select>
+        </label>
+        <p class="hint-text">PDFs with 4 languages per question — only the <strong>English</strong> version is extracted.</p>
+        <label>
+          PDF file *
+          <input type="file" id="pdfFile" accept="application/pdf,.pdf" required />
+        </label>
+        <p id="pdfUploadError" class="error-msg hidden"></p>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close-pdf-upload>Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnPdfExtract">Extract Questions</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- PDF Review & Bulk Submit Modal -->
+  <div id="pdfReviewModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-pdf-review></div>
+    <div class="modal-content modal-xl">
+      <div class="modal-header">
+        <h2 id="pdfReviewTitle">Review Extracted Questions</h2>
+        <button class="btn-icon" data-close-pdf-review>&times;</button>
+      </div>
+      <div class="pdf-review-toolbar">
+        <div id="pdfProgress" class="pdf-progress hidden">
+          <div class="pdf-progress-bar"><div id="pdfProgressFill" class="pdf-progress-fill"></div></div>
+          <span id="pdfProgressText">Processing...</span>
+        </div>
+        <div class="pdf-review-actions">
+          <label class="checkbox-label">
+            <input type="checkbox" id="pdfSelectAll" checked />
+            Select all
+          </label>
+          <span id="pdfReviewCount" class="stats"></span>
+        </div>
+      </div>
+      <div id="pdfReviewList" class="pdf-review-list"></div>
+      <p id="pdfReviewError" class="error-msg hidden"></p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-close-pdf-review>Cancel</button>
+        <button type="button" class="btn btn-primary" id="btnPdfBulkSubmit">Submit Selected</button>
+      </div>
     </div>
   </div>
 

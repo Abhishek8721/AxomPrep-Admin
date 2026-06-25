@@ -347,6 +347,117 @@ label textarea {
   margin: 4px 0 18px;
 }
 
+.modal-xl {
+  max-width: 900px;
+}
+
+.hint-text {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin: -6px 0 14px;
+  line-height: 1.45;
+}
+
+.pdf-review-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.pdf-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pdf-progress {
+  flex: 1;
+  min-width: 200px;
+}
+
+.pdf-progress-bar {
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.pdf-progress-fill {
+  height: 100%;
+  background: var(--red);
+  width: 0%;
+  transition: width 0.3s;
+}
+
+.pdf-progress span,
+#pdfProgressText {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.pdf-review-list {
+  max-height: 55vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-right: 4px;
+}
+
+.pdf-review-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  background: #fafafa;
+}
+
+.pdf-review-card.processing {
+  opacity: 0.7;
+  border-color: var(--gold);
+}
+
+.pdf-review-card.error {
+  border-color: var(--danger);
+  background: #fff5f5;
+}
+
+.pdf-review-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.pdf-review-card-header h4 {
+  font-size: 0.875rem;
+  color: var(--red);
+}
+
+.pdf-review-card .options-grid {
+  margin-bottom: 10px;
+}
+
+.pdf-review-card label {
+  margin-bottom: 10px;
+}
+
+.pdf-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 12px;
+}
+
+.pdf-status-pending { background: #f3f4f6; color: var(--muted); }
+.pdf-status-processing { background: #fef3c7; color: #92400e; }
+.pdf-status-done { background: #dcfce7; color: #166534; }
+.pdf-status-error { background: #fee2e2; color: #991b1b; }
+
 @media (max-width: 640px) {
   .options-grid { grid-template-columns: 1fr; }
   .header { flex-direction: column; align-items: flex-start; }

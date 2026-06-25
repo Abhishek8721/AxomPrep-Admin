@@ -27,6 +27,8 @@ const {
 } = require('../utils/questionPapers');
 const { requireAuth } = require('../middleware/auth');
 const { generateQuestionFromPaste } = require('../utils/ai');
+const { extractEnglishMcqsFromPdf } = require('../utils/pdfParser');
+const multer = require('multer');
 const {
   getNextQuestionId,
   getNextPaperQuestionId,
@@ -34,6 +36,18 @@ const {
 } = require('../utils/nextQuestionId');
 
 const router = express.Router();
+
+const pdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 12 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'));
+    }
+  },
+});
 
 router.use(requireAuth);
 
@@ -372,6 +386,108 @@ router.patch('/question-papers/:docId/toggle', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+/** POST /api/question-papers/parse-pdf — extract English MCQs from uploaded PDF */
+router.post('/question-papers/parse-pdf', (req, res, next) => {
+  pdfUpload.single('pdf')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  try {
+    if (!req.file?.buffer) {
+      return res.status(400).json({ error: 'PDF file is required' });
+    }
+
+    const examId = String(req.body.examId || '').trim();
+    if (!examId) {
+      return res.status(400).json({ error: 'Select an exam first' });
+    }
+
+    const knownExamIds = await getKnownExamIds();
+    if (!knownExamIds.includes(examId)) {
+      return res.status(400).json({ error: 'Selected exam does not exist' });
+    }
+
+    const result = await extractEnglishMcqsFromPdf(req.file.buffer);
+    res.json({
+      examId,
+      questions: result.questions,
+      total: result.questions.length,
+      meta: { chunks: result.pageCount, charCount: result.charCount },
+    });
+  } catch (err) {
+    console.error('PDF parse error:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/** POST /api/question-papers/process-question — verify one extracted MCQ with AI */
+router.post('/question-papers/process-question', async (req, res) => {
+  try {
+    const { rawText, subject } = req.body;
+    const generated = await generateQuestionFromPaste(rawText, subject);
+    res.json(generated);
+  } catch (err) {
+    console.error('Process question error:', err);
+    res.status(err.message.includes('not configured') ? 503 : 400).json({ error: err.message });
+  }
+});
+
+/** POST /api/question-papers/bulk — create multiple paper questions */
+router.post('/question-papers/bulk', async (req, res) => {
+  const { examId, questions } = req.body;
+  if (!examId || !Array.isArray(questions) || !questions.length) {
+    return res.status(400).json({ error: 'examId and questions array are required' });
+  }
+
+  const knownExamIds = await getKnownExamIds();
+  if (!knownExamIds.includes(examId)) {
+    return res.status(400).json({ error: 'Selected exam does not exist' });
+  }
+
+  const col = getDb().collection(getQuestionPaperCollectionName());
+  let nextId = await getNextPaperQuestionId(col, examId);
+  const created = [];
+  const errors = [];
+
+  for (let i = 0; i < questions.length; i += 1) {
+    const q = questions[i];
+    const body = { ...q, examId };
+    const validationErrors = validateQuestionPaper(body, knownExamIds, { isCreate: true });
+    if (validationErrors.length) {
+      errors.push({ index: i, error: validationErrors.join(', ') });
+      continue;
+    }
+
+    try {
+      const questionId = nextId;
+      nextId += 1;
+      const docId = buildPaperDocId(examId, questionId);
+      const payload = toPaperPayload({ ...body, examId, id: questionId });
+      payload.createdAt = new Date().toISOString();
+
+      const ref = col.doc(docId);
+      const existing = await ref.get();
+      if (existing.exists) {
+        errors.push({ index: i, error: `Question ${docId} already exists` });
+        continue;
+      }
+
+      await ref.set(payload);
+      created.push({ docId, ...payload });
+    } catch (err) {
+      errors.push({ index: i, error: err.message });
+    }
+  }
+
+  res.status(created.length ? 201 : 400).json({
+    created: created.length,
+    failed: errors.length,
+    questions: created,
+    errors,
+  });
 });
 
 // ── Exams catalog (`exams` collection) ─────────────────────────────

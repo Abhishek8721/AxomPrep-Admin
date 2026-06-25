@@ -4,6 +4,7 @@ let allExams = [];
 let deleteTarget = null;
 let deleteMode = 'practice';
 let currentMode = 'practice'; // 'practice' | 'exams' | 'papers'
+let pdfReviewState = { examId: '', subject: '', questions: [] };
 
 function apiBase() {
   if (currentMode === 'papers') return '/api/question-papers';
@@ -104,6 +105,309 @@ function updateModeUi() {
   });
 
   document.getElementById('aiPasteSection').classList.toggle('hidden', isPapers);
+  document.getElementById('btnUploadPdf').classList.toggle('hidden', !isPapers);
+}
+
+async function apiFormData(url, formData) {
+  const res = await fetch(url, { method: 'POST', body: formData });
+  if (res.status === 401) {
+    window.location.href = '/login.html';
+    throw new Error('Unauthorized');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+function openPdfUploadModal() {
+  const examSelect = document.getElementById('pdfExamId');
+  const subjectSelect = document.getElementById('pdfSubject');
+  examSelect.innerHTML = '';
+  subjectSelect.innerHTML = '';
+
+  if (!meta.exams.length) {
+    showAlert('Create an exam first in the Exams tab', 'error');
+    return;
+  }
+
+  meta.exams.forEach((e) => {
+    examSelect.innerHTML += `<option value="${e.id}">${examLabel(e)}</option>`;
+  });
+
+  const filterExam = document.getElementById('filterCategory').value;
+  if (filterExam) examSelect.value = filterExam;
+
+  meta.categories.forEach((c) => {
+    subjectSelect.innerHTML += `<option value="${c.id}">${c.icon} ${c.label}</option>`;
+  });
+
+  document.getElementById('pdfUploadForm').reset();
+  if (filterExam) document.getElementById('pdfExamId').value = filterExam;
+  document.getElementById('pdfUploadError').classList.add('hidden');
+  document.getElementById('pdfUploadModal').classList.remove('hidden');
+}
+
+function closePdfUploadModal() {
+  document.getElementById('pdfUploadModal').classList.add('hidden');
+}
+
+function closePdfReviewModal() {
+  document.getElementById('pdfReviewModal').classList.add('hidden');
+  pdfReviewState = { examId: '', subject: '', questions: [] };
+}
+
+function pdfStatusLabel(status) {
+  if (status === 'processing') return 'Verifying...';
+  if (status === 'done') return 'Ready';
+  if (status === 'error') return 'Failed';
+  return 'Pending';
+}
+
+function renderPdfReviewList() {
+  const list = document.getElementById('pdfReviewList');
+  const questions = pdfReviewState.questions;
+
+  document.getElementById('pdfReviewCount').textContent =
+    `${questions.filter((q) => q.included).length} of ${questions.length} selected`;
+
+  list.innerHTML = questions
+    .map((q, i) => {
+      const statusClass = `pdf-status-${q.status || 'pending'}`;
+      const cardClass = q.status === 'processing' ? 'processing' : q.status === 'error' ? 'error' : '';
+      const opts = (q.options || ['', '', '', '']).map(
+        (opt, j) =>
+          `<label>Option ${['A', 'B', 'C', 'D'][j]}
+            <input type="text" data-q="${i}" data-field="opt${j}" value="${escapeHtml(opt)}" ${q.status === 'processing' ? 'disabled' : ''} />
+          </label>`
+      ).join('');
+
+      return `
+        <div class="pdf-review-card ${cardClass}" data-index="${i}">
+          <div class="pdf-review-card-header">
+            <label class="checkbox-label">
+              <input type="checkbox" data-q-include="${i}" ${q.included ? 'checked' : ''} ${q.status !== 'done' ? 'disabled' : ''} />
+              <h4>Q${q.number || i + 1}</h4>
+            </label>
+            <span class="pdf-status ${statusClass}">${pdfStatusLabel(q.status)}</span>
+          </div>
+          ${q.error ? `<p class="error-msg">${escapeHtml(q.error)}</p>` : ''}
+          <label>Question
+            <textarea rows="2" data-q="${i}" data-field="question" ${q.status === 'processing' ? 'disabled' : ''}>${escapeHtml(q.question || '')}</textarea>
+          </label>
+          <div class="options-grid">${opts}</div>
+          <div class="form-row">
+            <label>Correct Answer
+              <select data-q="${i}" data-field="correctAnswer" ${q.status !== 'done' ? 'disabled' : ''}>
+                <option value="0" ${q.correctAnswer === 0 ? 'selected' : ''}>A</option>
+                <option value="1" ${q.correctAnswer === 1 ? 'selected' : ''}>B</option>
+                <option value="2" ${q.correctAnswer === 2 ? 'selected' : ''}>C</option>
+                <option value="3" ${q.correctAnswer === 3 ? 'selected' : ''}>D</option>
+              </select>
+            </label>
+            <label>Difficulty
+              <select data-q="${i}" data-field="difficulty" ${q.status !== 'done' ? 'disabled' : ''}>
+                <option value="Easy" ${q.difficulty === 'Easy' ? 'selected' : ''}>Easy</option>
+                <option value="Medium" ${q.difficulty === 'Medium' ? 'selected' : ''}>Medium</option>
+                <option value="Hard" ${q.difficulty === 'Hard' ? 'selected' : ''}>Hard</option>
+              </select>
+            </label>
+          </div>
+          <label>Explanation
+            <textarea rows="3" data-q="${i}" data-field="explanation" ${q.status !== 'done' ? 'disabled' : ''}>${escapeHtml(q.explanation || '')}</textarea>
+          </label>
+        </div>`;
+    })
+    .join('');
+}
+
+function syncPdfReviewFromDom() {
+  pdfReviewState.questions.forEach((q, i) => {
+    const card = document.querySelector(`.pdf-review-card[data-index="${i}"]`);
+    if (!card) return;
+    q.included = card.querySelector(`[data-q-include="${i}"]`)?.checked ?? q.included;
+    q.question = card.querySelector(`[data-field="question"]`)?.value ?? q.question;
+    q.correctAnswer = Number(card.querySelector(`[data-field="correctAnswer"]`)?.value ?? q.correctAnswer);
+    q.difficulty = card.querySelector(`[data-field="difficulty"]`)?.value ?? q.difficulty;
+    q.explanation = card.querySelector(`[data-field="explanation"]`)?.value ?? q.explanation;
+    q.options = [0, 1, 2, 3].map((j) => card.querySelector(`[data-field="opt${j}"]`)?.value ?? q.options[j]);
+  });
+}
+
+function updatePdfProgress(done, total, text) {
+  const wrap = document.getElementById('pdfProgress');
+  wrap.classList.remove('hidden');
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  document.getElementById('pdfProgressFill').style.width = `${pct}%`;
+  document.getElementById('pdfProgressText').textContent = text;
+}
+
+async function processPdfQuestions() {
+  const { subject, questions } = pdfReviewState;
+  const total = questions.length;
+
+  for (let i = 0; i < total; i += 1) {
+    const q = pdfReviewState.questions[i];
+    q.status = 'processing';
+    q.included = false;
+    renderPdfReviewList();
+    updatePdfProgress(i, total, `Verifying question ${i + 1} of ${total}...`);
+
+    try {
+      const result = await api('/api/question-papers/process-question', {
+        method: 'POST',
+        body: JSON.stringify({ rawText: q.rawText, subject }),
+      });
+      Object.assign(q, {
+        question: result.question,
+        options: result.options,
+        correctAnswer: result.correctAnswer,
+        explanation: result.explanation,
+        difficulty: result.difficulty || 'Medium',
+        status: 'done',
+        included: true,
+        error: '',
+      });
+    } catch (err) {
+      q.status = 'error';
+      q.error = err.message;
+      q.included = false;
+    }
+
+    renderPdfReviewList();
+  }
+
+  updatePdfProgress(total, total, 'All questions processed — review and submit');
+  document.getElementById('btnPdfBulkSubmit').disabled = false;
+}
+
+async function handlePdfUpload(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('pdfUploadError');
+  errEl.classList.add('hidden');
+
+  const examId = document.getElementById('pdfExamId').value;
+  const subject = document.getElementById('pdfSubject').value;
+  const fileInput = document.getElementById('pdfFile');
+  const file = fileInput.files?.[0];
+
+  if (!file) {
+    errEl.textContent = 'Choose a PDF file.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const btn = document.getElementById('btnPdfExtract');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Extracting...';
+
+  try {
+    const formData = new FormData();
+    formData.append('pdf', file);
+    formData.append('examId', examId);
+
+    const data = await apiFormData('/api/question-papers/parse-pdf', formData);
+
+    pdfReviewState = {
+      examId,
+      subject,
+      questions: data.questions.map((q) => ({
+        ...q,
+        difficulty: 'Medium',
+        correctAnswer: 0,
+        explanation: '',
+        status: 'pending',
+        included: false,
+        error: '',
+      })),
+    };
+
+    closePdfUploadModal();
+    document.getElementById('pdfReviewTitle').textContent =
+      `Review: ${data.total} English questions extracted`;
+    document.getElementById('pdfReviewError').classList.add('hidden');
+    document.getElementById('btnPdfBulkSubmit').disabled = true;
+    document.getElementById('pdfSelectAll').checked = true;
+    document.getElementById('pdfReviewModal').classList.remove('hidden');
+    renderPdfReviewList();
+    await processPdfQuestions();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+async function bulkSubmitPdfQuestions() {
+  syncPdfReviewFromDom();
+  const errEl = document.getElementById('pdfReviewError');
+  errEl.classList.add('hidden');
+
+  const selected = pdfReviewState.questions.filter((q) => q.included && q.status === 'done');
+  if (!selected.length) {
+    errEl.textContent = 'Select at least one verified question to submit.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const btn = document.getElementById('btnPdfBulkSubmit');
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+
+  try {
+    const payload = {
+      examId: pdfReviewState.examId,
+      questions: selected.map((q) => ({
+        question: q.question,
+        options: q.options,
+        correctAnswer: q.correctAnswer,
+        explanation: q.explanation,
+        difficulty: q.difficulty,
+        active: true,
+      })),
+    };
+
+    const result = await api('/api/question-papers/bulk', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (result.failed) {
+      showAlert(`Saved ${result.created}, failed ${result.failed}`, 'error');
+    } else {
+      const savedExamId = pdfReviewState.examId;
+      showAlert(`${result.created} questions saved successfully`);
+      closePdfReviewModal();
+      document.getElementById('filterCategory').value = savedExamId;
+      loadData();
+    }
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Submit Selected';
+  }
+}
+
+function handlePdfSelectAll(e) {
+  const checked = e.target.checked;
+  pdfReviewState.questions.forEach((q) => {
+    if (q.status === 'done') q.included = checked;
+  });
+  renderPdfReviewList();
+}
+
+function handlePdfReviewChange(e) {
+  const includeEl = e.target.closest('[data-q-include]');
+  if (includeEl) {
+    const i = Number(includeEl.dataset.qInclude);
+    pdfReviewState.questions[i].included = includeEl.checked;
+    document.getElementById('pdfReviewCount').textContent =
+      `${pdfReviewState.questions.filter((q) => q.included).length} of ${pdfReviewState.questions.length} selected`;
+  }
 }
 
 async function checkAuth() {
@@ -605,7 +909,18 @@ switchMode = function (mode) {
 
 // Event listeners
 document.getElementById('btnNew').addEventListener('click', handleNewClick);
+document.getElementById('btnUploadPdf').addEventListener('click', openPdfUploadModal);
 document.getElementById('btnGenerateAi').addEventListener('click', generateWithAi);
+document.getElementById('pdfUploadForm').addEventListener('submit', handlePdfUpload);
+document.getElementById('btnPdfBulkSubmit').addEventListener('click', bulkSubmitPdfQuestions);
+document.getElementById('pdfSelectAll').addEventListener('change', handlePdfSelectAll);
+document.getElementById('pdfReviewList').addEventListener('change', handlePdfReviewChange);
+document.querySelectorAll('[data-close-pdf-upload]').forEach((el) =>
+  el.addEventListener('click', closePdfUploadModal)
+);
+document.querySelectorAll('[data-close-pdf-review]').forEach((el) =>
+  el.addEventListener('click', closePdfReviewModal)
+);
 document.getElementById('tabPractice').addEventListener('click', () => switchMode('practice'));
 document.getElementById('tabExams').addEventListener('click', () => switchMode('exams'));
 document.getElementById('tabPapers').addEventListener('click', () => switchMode('papers'));
