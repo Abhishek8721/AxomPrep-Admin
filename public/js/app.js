@@ -4,7 +4,7 @@ let allExams = [];
 let deleteTarget = null;
 let deleteMode = 'practice';
 let currentMode = 'practice'; // 'practice' | 'exams' | 'papers'
-let pdfReviewState = { examId: '', questions: [] };
+let pdfReviewState = { mode: 'papers', examId: '', category: '', questions: [] };
 
 function apiBase() {
   if (currentMode === 'papers') return '/api/question-papers';
@@ -105,7 +105,7 @@ function updateModeUi() {
   });
 
   document.getElementById('aiPasteSection').classList.toggle('hidden', isPapers);
-  document.getElementById('btnUploadPdf').classList.toggle('hidden', !isPapers);
+  document.getElementById('btnUploadPdf').classList.toggle('hidden', isExams);
 }
 
 async function apiFormData(url, formData) {
@@ -120,23 +120,52 @@ async function apiFormData(url, formData) {
 }
 
 function openPdfUploadModal() {
+  const isPractice = currentMode === 'practice';
+  const examRow = document.getElementById('pdfExamRow');
+  const categoryRow = document.getElementById('pdfCategoryRow');
   const examSelect = document.getElementById('pdfExamId');
-  examSelect.innerHTML = '';
+  const categorySelect = document.getElementById('pdfCategory');
 
-  if (!meta.exams.length) {
-    showAlert('Create an exam first in the Exams tab', 'error');
-    return;
+  examRow.classList.toggle('hidden', isPractice);
+  categoryRow.classList.toggle('hidden', !isPractice);
+
+  document.getElementById('pdfUploadTitle').textContent = isPractice
+    ? 'Upload Practice PDF'
+    : 'Upload Question Paper PDF';
+
+  document.getElementById('pdfHintText').innerHTML = isPractice
+    ? 'Select category first. English questions are extracted from the PDF, then <strong>rephrased</strong> by AI (not copied verbatim). Options are shuffled. Review before saving.'
+    : 'PDFs with 4 languages per question — only the <strong>English</strong> version is extracted as-is. AI finds the answer, explanation, and difficulty only.';
+
+  if (isPractice) {
+    categorySelect.innerHTML = '';
+    meta.categories.forEach((c) => {
+      categorySelect.innerHTML += `<option value="${c.id}">${c.icon} ${c.label}</option>`;
+    });
+    const filterCat = document.getElementById('filterCategory').value;
+    if (filterCat) categorySelect.value = filterCat;
+  } else {
+    examSelect.innerHTML = '';
+    if (!meta.exams.length) {
+      showAlert('Create an exam first in the Exams tab', 'error');
+      return;
+    }
+    meta.exams.forEach((e) => {
+      examSelect.innerHTML += `<option value="${e.id}">${examLabel(e)}</option>`;
+    });
+    const filterExam = document.getElementById('filterCategory').value;
+    if (filterExam) examSelect.value = filterExam;
   }
 
-  meta.exams.forEach((e) => {
-    examSelect.innerHTML += `<option value="${e.id}">${examLabel(e)}</option>`;
-  });
-
-  const filterExam = document.getElementById('filterCategory').value;
-  if (filterExam) examSelect.value = filterExam;
-
   document.getElementById('pdfUploadForm').reset();
-  if (filterExam) document.getElementById('pdfExamId').value = filterExam;
+  if (isPractice) {
+    const filterCat = document.getElementById('filterCategory').value;
+    if (filterCat) document.getElementById('pdfCategory').value = filterCat;
+  } else {
+    const filterExam = document.getElementById('filterCategory').value;
+    if (filterExam) document.getElementById('pdfExamId').value = filterExam;
+  }
+
   document.getElementById('pdfUploadError').classList.add('hidden');
   document.getElementById('pdfUploadModal').classList.remove('hidden');
 }
@@ -147,17 +176,13 @@ function closePdfUploadModal() {
 
 function closePdfReviewModal() {
   document.getElementById('pdfReviewModal').classList.add('hidden');
-  pdfReviewState = { examId: '', questions: [] };
+  pdfReviewState = { mode: currentMode === 'practice' ? 'practice' : 'papers', examId: '', category: '', questions: [] };
 }
 
-function pdfTypeLabel(type) {
-  if (type === 'maths') return 'Maths';
-  if (type === 'reasoning') return 'Reasoning';
-  return 'GK';
-}
-
-function pdfStatusLabel(status) {
-  if (status === 'processing') return 'Verifying...';
+function pdfProcessLabel(status) {
+  if (status === 'processing') {
+    return pdfReviewState.mode === 'practice' ? 'Generating...' : 'Verifying...';
+  }
   if (status === 'done') return 'Ready';
   if (status === 'error') return 'Failed';
   return 'Pending';
@@ -189,7 +214,7 @@ function renderPdfReviewList() {
               <h4>Q${q.number || i + 1}</h4>
             </label>
             <div class="pdf-review-card-actions">
-              <span class="pdf-status ${statusClass}">${pdfStatusLabel(q.status)}${q.questionType && q.status === 'done' ? ` · ${pdfTypeLabel(q.questionType)}` : ''}</span>
+              <span class="pdf-status ${statusClass}">${pdfProcessLabel(q.status)}${q.questionType && q.status === 'done' && pdfReviewState.mode === 'papers' ? ` · ${pdfTypeLabel(q.questionType)}` : ''}</span>
               <button type="button" class="btn btn-danger btn-sm" data-q-remove="${i}" ${q.status === 'processing' ? 'disabled' : ''}>Remove</button>
             </div>
           </div>
@@ -244,26 +269,38 @@ function updatePdfProgress(done, total, text) {
   document.getElementById('pdfProgressText').textContent = text;
 }
 
+function pdfTypeLabel(type) {
+  if (type === 'maths') return 'Maths';
+  if (type === 'reasoning') return 'Reasoning';
+  return 'GK';
+}
+
 async function processPdfQuestions() {
-  const { questions } = pdfReviewState;
+  const { questions, mode, category } = pdfReviewState;
   const total = questions.length;
+  const processUrl =
+    mode === 'practice' ? '/api/questions/process-question' : '/api/question-papers/process-question';
 
   for (let i = 0; i < total; i += 1) {
     const q = pdfReviewState.questions[i];
     q.status = 'processing';
     q.included = false;
     renderPdfReviewList();
-    updatePdfProgress(i, total, `Verifying question ${i + 1} of ${total}...`);
+    updatePdfProgress(
+      i,
+      total,
+      mode === 'practice'
+        ? `Generating question ${i + 1} of ${total}...`
+        : `Verifying question ${i + 1} of ${total}...`
+    );
 
     try {
-      const result = await api('/api/question-papers/process-question', {
-        method: 'POST',
-        body: JSON.stringify({
-          rawText: q.rawText,
-          question: q.question,
-          options: q.options,
-        }),
-      });
+      const body =
+        mode === 'practice'
+          ? { rawText: q.rawText, question: q.question, options: q.options, category }
+          : { rawText: q.rawText, question: q.question, options: q.options };
+
+      const result = await api(processUrl, { method: 'POST', body: JSON.stringify(body) });
       Object.assign(q, {
         question: result.question,
         options: result.options,
@@ -293,12 +330,26 @@ async function handlePdfUpload(e) {
   const errEl = document.getElementById('pdfUploadError');
   errEl.classList.add('hidden');
 
+  const isPractice = currentMode === 'practice';
   const examId = document.getElementById('pdfExamId').value;
+  const category = document.getElementById('pdfCategory').value;
   const fileInput = document.getElementById('pdfFile');
   const file = fileInput.files?.[0];
 
   if (!file) {
     errEl.textContent = 'Choose a PDF file.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  if (isPractice && !category) {
+    errEl.textContent = 'Select a category first.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  if (!isPractice && !examId) {
+    errEl.textContent = 'Select an exam first.';
     errEl.classList.remove('hidden');
     return;
   }
@@ -311,12 +362,16 @@ async function handlePdfUpload(e) {
   try {
     const formData = new FormData();
     formData.append('pdf', file);
-    formData.append('examId', examId);
+    const parseUrl = isPractice ? '/api/questions/parse-pdf' : '/api/question-papers/parse-pdf';
+    if (isPractice) formData.append('category', category);
+    else formData.append('examId', examId);
 
-    const data = await apiFormData('/api/question-papers/parse-pdf', formData);
+    const data = await apiFormData(parseUrl, formData);
 
     pdfReviewState = {
-      examId,
+      mode: isPractice ? 'practice' : 'papers',
+      examId: isPractice ? '' : examId,
+      category: isPractice ? category : '',
       questions: data.questions.map((q) => ({
         ...q,
         difficulty: 'Medium',
@@ -363,30 +418,41 @@ async function bulkSubmitPdfQuestions() {
   btn.textContent = 'Submitting...';
 
   try {
-    const payload = {
-      examId: pdfReviewState.examId,
-      questions: selected.map((q) => ({
-        question: q.question,
-        options: q.options,
-        correctAnswer: q.correctAnswer,
-        explanation: q.explanation,
-        difficulty: q.difficulty,
-        active: true,
-      })),
-    };
+    const isPractice = pdfReviewState.mode === 'practice';
+    const payload = isPractice
+      ? {
+          category: pdfReviewState.category,
+          questions: selected.map((q) => ({
+            question: q.question,
+            options: q.options,
+            correctAnswer: q.correctAnswer,
+            explanation: q.explanation,
+            difficulty: q.difficulty,
+            active: true,
+          })),
+        }
+      : {
+          examId: pdfReviewState.examId,
+          questions: selected.map((q) => ({
+            question: q.question,
+            options: q.options,
+            correctAnswer: q.correctAnswer,
+            explanation: q.explanation,
+            difficulty: q.difficulty,
+            active: true,
+          })),
+        };
 
-    const result = await api('/api/question-papers/bulk', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    const bulkUrl = isPractice ? '/api/questions/bulk' : '/api/question-papers/bulk';
+    const result = await api(bulkUrl, { method: 'POST', body: JSON.stringify(payload) });
 
     if (result.failed) {
       showAlert(`Saved ${result.created}, failed ${result.failed}`, 'error');
     } else {
-      const savedExamId = pdfReviewState.examId;
+      const savedFilter = isPractice ? pdfReviewState.category : pdfReviewState.examId;
       showAlert(`${result.created} questions saved successfully`);
       closePdfReviewModal();
-      document.getElementById('filterCategory').value = savedExamId;
+      document.getElementById('filterCategory').value = savedFilter;
       loadData();
     }
   } catch (err) {

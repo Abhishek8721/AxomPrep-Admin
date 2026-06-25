@@ -49,6 +49,22 @@ const pdfUpload = multer({
   },
 });
 
+function pdfUploadMiddleware(req, res, next) {
+  pdfUpload.single('pdf')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}
+
+async function parsePdfBuffer(buffer) {
+  const result = await extractEnglishMcqsFromPdf(buffer);
+  return {
+    questions: result.questions,
+    total: result.questions.length,
+    meta: { chunks: result.pageCount, charCount: result.charCount },
+  };
+}
+
 router.use(requireAuth);
 
 async function getKnownExamIds() {
@@ -132,6 +148,91 @@ router.post('/questions/generate', async (req, res) => {
     console.error('AI generate error:', err);
     res.status(err.message.includes('not configured') ? 503 : 400).json({ error: err.message });
   }
+});
+
+/** POST /api/questions/parse-pdf — extract English MCQs from PDF (practice) */
+router.post('/questions/parse-pdf', pdfUploadMiddleware, async (req, res) => {
+  try {
+    if (!req.file?.buffer) {
+      return res.status(400).json({ error: 'PDF file is required' });
+    }
+    const category = String(req.body.category || '').trim();
+    if (!category || !CATEGORIES.some((c) => c.id === category)) {
+      return res.status(400).json({ error: 'Select a valid category first' });
+    }
+    const parsed = await parsePdfBuffer(req.file.buffer);
+    res.json({ category, ...parsed });
+  } catch (err) {
+    console.error('Practice PDF parse error:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/** POST /api/questions/process-question — rephrase PDF MCQ for practice */
+router.post('/questions/process-question', async (req, res) => {
+  try {
+    const { category, rawText, question, options } = req.body;
+    const { resolvePaperFields } = require('../utils/questionParse');
+    const { rawText: text } = resolvePaperFields({ rawText, question, options });
+    const generated = await generateQuestionFromPaste(text, category);
+    res.json(generated);
+  } catch (err) {
+    console.error('Practice process question error:', err);
+    res.status(err.message.includes('not configured') ? 503 : 400).json({ error: err.message });
+  }
+});
+
+/** POST /api/questions/bulk — create multiple practice questions */
+router.post('/questions/bulk', async (req, res) => {
+  const { category, questions } = req.body;
+  if (!category || !CATEGORIES.some((c) => c.id === category)) {
+    return res.status(400).json({ error: 'Valid category is required' });
+  }
+  if (!Array.isArray(questions) || !questions.length) {
+    return res.status(400).json({ error: 'questions array is required' });
+  }
+
+  const col = getDb().collection(getCollectionName());
+  let nextId = await getNextQuestionId(col, 'category', category);
+  const created = [];
+  const errors = [];
+
+  for (let i = 0; i < questions.length; i += 1) {
+    const q = questions[i];
+    const body = { ...q, category };
+    const validationErrors = validateQuestion(body, { isCreate: true });
+    if (validationErrors.length) {
+      errors.push({ index: i, error: validationErrors.join(', ') });
+      continue;
+    }
+
+    try {
+      const questionId = nextId;
+      nextId += 1;
+      const docId = buildDocId(category, questionId);
+      const payload = toFirestorePayload({ ...body, category, id: questionId });
+      payload.createdAt = new Date().toISOString();
+
+      const ref = col.doc(docId);
+      const existing = await ref.get();
+      if (existing.exists) {
+        errors.push({ index: i, error: `Question ${docId} already exists` });
+        continue;
+      }
+
+      await ref.set(payload);
+      created.push({ docId, ...payload });
+    } catch (err) {
+      errors.push({ index: i, error: err.message });
+    }
+  }
+
+  res.status(created.length ? 201 : 400).json({
+    created: created.length,
+    failed: errors.length,
+    questions: created,
+    errors,
+  });
 });
 
 /** POST /api/questions — create */
@@ -389,12 +490,7 @@ router.patch('/question-papers/:docId/toggle', async (req, res) => {
 });
 
 /** POST /api/question-papers/parse-pdf — extract English MCQs from uploaded PDF */
-router.post('/question-papers/parse-pdf', (req, res, next) => {
-  pdfUpload.single('pdf')(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message });
-    next();
-  });
-}, async (req, res) => {
+router.post('/question-papers/parse-pdf', pdfUploadMiddleware, async (req, res) => {
   try {
     if (!req.file?.buffer) {
       return res.status(400).json({ error: 'PDF file is required' });
@@ -410,13 +506,8 @@ router.post('/question-papers/parse-pdf', (req, res, next) => {
       return res.status(400).json({ error: 'Selected exam does not exist' });
     }
 
-    const result = await extractEnglishMcqsFromPdf(req.file.buffer);
-    res.json({
-      examId,
-      questions: result.questions,
-      total: result.questions.length,
-      meta: { chunks: result.pageCount, charCount: result.charCount },
-    });
+    const parsed = await parsePdfBuffer(req.file.buffer);
+    res.json({ examId, ...parsed });
   } catch (err) {
     console.error('PDF parse error:', err);
     res.status(400).json({ error: err.message });

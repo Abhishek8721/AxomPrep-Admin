@@ -209,15 +209,19 @@
     <div class="modal-backdrop" data-close-pdf-upload></div>
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Upload Question Paper PDF</h2>
+        <h2 id="pdfUploadTitle">Upload PDF</h2>
         <button class="btn-icon" data-close-pdf-upload>&times;</button>
       </div>
       <form id="pdfUploadForm">
-        <label>
+        <label id="pdfExamRow">
           Exam *
-          <select id="pdfExamId" required></select>
+          <select id="pdfExamId"></select>
         </label>
-        <p class="hint-text">PDFs with 4 languages per question — only the <strong>English</strong> version is extracted as-is. AI finds the answer, explanation, and difficulty only.</p>
+        <label id="pdfCategoryRow" class="hidden">
+          Category *
+          <select id="pdfCategory"></select>
+        </label>
+        <p id="pdfHintText" class="hint-text"></p>
         <label>
           PDF file *
           <input type="file" id="pdfFile" accept="application/pdf,.pdf" required />
