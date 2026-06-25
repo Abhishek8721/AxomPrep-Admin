@@ -433,6 +433,13 @@ label textarea {
   margin-bottom: 10px;
 }
 
+.pdf-review-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .pdf-review-card-header h4 {
   font-size: 0.875rem;
   color: var(--red);

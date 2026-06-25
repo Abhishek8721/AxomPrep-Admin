@@ -188,7 +188,10 @@ function renderPdfReviewList() {
               <input type="checkbox" data-q-include="${i}" ${q.included ? 'checked' : ''} ${q.status !== 'done' ? 'disabled' : ''} />
               <h4>Q${q.number || i + 1}</h4>
             </label>
-            <span class="pdf-status ${statusClass}">${pdfStatusLabel(q.status)}${q.questionType && q.status === 'done' ? ` · ${pdfTypeLabel(q.questionType)}` : ''}</span>
+            <div class="pdf-review-card-actions">
+              <span class="pdf-status ${statusClass}">${pdfStatusLabel(q.status)}${q.questionType && q.status === 'done' ? ` · ${pdfTypeLabel(q.questionType)}` : ''}</span>
+              <button type="button" class="btn btn-danger btn-sm" data-q-remove="${i}" ${q.status === 'processing' ? 'disabled' : ''}>Remove</button>
+            </div>
           </div>
           ${q.error ? `<p class="error-msg">${escapeHtml(q.error)}</p>` : ''}
           <label>Question
@@ -406,6 +409,24 @@ function handlePdfReviewChange(e) {
     pdfReviewState.questions[i].included = includeEl.checked;
     document.getElementById('pdfReviewCount').textContent =
       `${pdfReviewState.questions.filter((q) => q.included).length} of ${pdfReviewState.questions.length} selected`;
+  }
+}
+
+function removePdfQuestion(index) {
+  syncPdfReviewFromDom();
+  pdfReviewState.questions.splice(index, 1);
+  if (!pdfReviewState.questions.length) {
+    closePdfReviewModal();
+    showAlert('All questions removed');
+    return;
+  }
+  renderPdfReviewList();
+}
+
+function handlePdfReviewClick(e) {
+  const removeBtn = e.target.closest('[data-q-remove]');
+  if (removeBtn) {
+    removePdfQuestion(Number(removeBtn.dataset.qRemove));
   }
 }
 
@@ -914,6 +935,7 @@ document.getElementById('pdfUploadForm').addEventListener('submit', handlePdfUpl
 document.getElementById('btnPdfBulkSubmit').addEventListener('click', bulkSubmitPdfQuestions);
 document.getElementById('pdfSelectAll').addEventListener('change', handlePdfSelectAll);
 document.getElementById('pdfReviewList').addEventListener('change', handlePdfReviewChange);
+document.getElementById('pdfReviewList').addEventListener('click', handlePdfReviewClick);
 document.querySelectorAll('[data-close-pdf-upload]').forEach((el) =>
   el.addEventListener('click', closePdfUploadModal)
 );

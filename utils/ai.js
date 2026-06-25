@@ -1,5 +1,5 @@
 const { CATEGORIES, DIFFICULTIES } = require('./questions');
-const { extractOptions, detectQuestionType } = require('./questionParse');
+const { extractOptions, detectQuestionType, extractQuestion } = require('./questionParse');
 const { searchForAnswer } = require('./webSearch');
 
 const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
@@ -496,6 +496,36 @@ function validatePaperGenerated(data, verified) {
   };
 }
 
+function mapCorrectToOriginal(originalOptions, verified) {
+  const correctText = String(verified.options[verified.correctAnswer] || '').trim().toLowerCase();
+  if (!correctText) return Number(verified.correctAnswer);
+
+  const idx = originalOptions.findIndex((o) => {
+    const norm = String(o).trim().toLowerCase();
+    return norm === correctText || norm.includes(correctText) || correctText.includes(norm);
+  });
+  return idx >= 0 ? idx : Number(verified.correctAnswer);
+}
+
+async function pickPaperDifficulty(rawText, questionType) {
+  const result = await callAzure(
+    [
+      {
+        role: 'system',
+        content:
+          'Rate the difficulty of an Indian competitive exam MCQ. Return JSON only: { "difficulty": "Easy" | "Medium" | "Hard" }',
+      },
+      {
+        role: 'user',
+        content: `Question type: ${questionType}\n\n${rawText}`,
+      },
+    ],
+    { temperature: 0.1, maxTokens: 80 }
+  );
+
+  return DIFFICULTIES.includes(result.difficulty) ? result.difficulty : 'Medium';
+}
+
 async function generatePaperQuestion(rawText) {
   const text = String(rawText || '').trim();
   if (!text) {
@@ -503,38 +533,35 @@ async function generatePaperQuestion(rawText) {
   }
 
   const parsedOptions = extractOptions(text);
+  const originalQuestion = extractQuestion(text);
+
+  if (!originalQuestion) {
+    throw new Error('Could not parse question text');
+  }
+  if (!parsedOptions || parsedOptions.length !== 4) {
+    throw new Error('Could not parse four options');
+  }
+
+  const originalOptions = parsedOptions.map((o) => String(o).trim());
   const { questionType, category } = detectCategoryAuto(text, parsedOptions);
 
   const verified = await verifyAnswer(text, category);
   verified.questionType = questionType;
   verified.category = category;
 
-  const correctLabel = verified.options[verified.correctAnswer];
-  const generatePrompt = getGeneratePrompt(questionType);
-  const verifiedMethod =
-    questionType === 'factual' ? 'web search' : `step-by-step ${questionType} solution`;
+  const correctAnswer = mapCorrectToOriginal(originalOptions, verified);
+  const difficulty = await pickPaperDifficulty(text, questionType);
 
-  const generated = await callAzure(
-    [
-      { role: 'system', content: generatePrompt },
-      {
-        role: 'user',
-        content: `PASTED QUESTION:\n${text}\n\nVERIFIED BY: ${verifiedMethod}\nVERIFIED CORRECT OPTION: "${correctLabel}"\nVERIFIED INDEX IN SOURCE OPTIONS: ${verified.correctAnswer}\nSOURCE OPTIONS: ${JSON.stringify(verified.options)}\nVERIFIED EXPLANATION (keep this working in the final explanation):\n${verified.explanation || verified.verificationNote}\n\nPick an appropriate difficulty (Easy, Medium, or Hard) for this exam-level question.`,
-      },
-    ],
+  return validatePaperGenerated(
     {
-      temperature: questionType === 'factual' ? 0.5 : 0.3,
-      maxTokens: questionType === 'factual' ? 1400 : 1800,
-    }
+      question: originalQuestion,
+      options: originalOptions,
+      correctAnswer,
+      explanation: verified.explanation || verified.verificationNote || '',
+      difficulty,
+    },
+    verified
   );
-
-  alignGeneratedAnswer(generated, verified);
-
-  const shuffled = shuffleOptions(generated.options, Number(generated.correctAnswer));
-  generated.options = shuffled.options;
-  generated.correctAnswer = shuffled.correctAnswer;
-
-  return validatePaperGenerated(generated, verified);
 }
 
 async function generateQuestionFromPaste(rawText, category) {
