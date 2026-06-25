@@ -4,7 +4,7 @@ let allExams = [];
 let deleteTarget = null;
 let deleteMode = 'practice';
 let currentMode = 'practice'; // 'practice' | 'exams' | 'papers'
-let pdfReviewState = { examId: '', subject: '', questions: [] };
+let pdfReviewState = { examId: '', questions: [] };
 
 function apiBase() {
   if (currentMode === 'papers') return '/api/question-papers';
@@ -121,9 +121,7 @@ async function apiFormData(url, formData) {
 
 function openPdfUploadModal() {
   const examSelect = document.getElementById('pdfExamId');
-  const subjectSelect = document.getElementById('pdfSubject');
   examSelect.innerHTML = '';
-  subjectSelect.innerHTML = '';
 
   if (!meta.exams.length) {
     showAlert('Create an exam first in the Exams tab', 'error');
@@ -137,10 +135,6 @@ function openPdfUploadModal() {
   const filterExam = document.getElementById('filterCategory').value;
   if (filterExam) examSelect.value = filterExam;
 
-  meta.categories.forEach((c) => {
-    subjectSelect.innerHTML += `<option value="${c.id}">${c.icon} ${c.label}</option>`;
-  });
-
   document.getElementById('pdfUploadForm').reset();
   if (filterExam) document.getElementById('pdfExamId').value = filterExam;
   document.getElementById('pdfUploadError').classList.add('hidden');
@@ -153,7 +147,13 @@ function closePdfUploadModal() {
 
 function closePdfReviewModal() {
   document.getElementById('pdfReviewModal').classList.add('hidden');
-  pdfReviewState = { examId: '', subject: '', questions: [] };
+  pdfReviewState = { examId: '', questions: [] };
+}
+
+function pdfTypeLabel(type) {
+  if (type === 'maths') return 'Maths';
+  if (type === 'reasoning') return 'Reasoning';
+  return 'GK';
 }
 
 function pdfStatusLabel(status) {
@@ -188,7 +188,7 @@ function renderPdfReviewList() {
               <input type="checkbox" data-q-include="${i}" ${q.included ? 'checked' : ''} ${q.status !== 'done' ? 'disabled' : ''} />
               <h4>Q${q.number || i + 1}</h4>
             </label>
-            <span class="pdf-status ${statusClass}">${pdfStatusLabel(q.status)}</span>
+            <span class="pdf-status ${statusClass}">${pdfStatusLabel(q.status)}${q.questionType && q.status === 'done' ? ` · ${pdfTypeLabel(q.questionType)}` : ''}</span>
           </div>
           ${q.error ? `<p class="error-msg">${escapeHtml(q.error)}</p>` : ''}
           <label>Question
@@ -242,7 +242,7 @@ function updatePdfProgress(done, total, text) {
 }
 
 async function processPdfQuestions() {
-  const { subject, questions } = pdfReviewState;
+  const { questions } = pdfReviewState;
   const total = questions.length;
 
   for (let i = 0; i < total; i += 1) {
@@ -255,7 +255,7 @@ async function processPdfQuestions() {
     try {
       const result = await api('/api/question-papers/process-question', {
         method: 'POST',
-        body: JSON.stringify({ rawText: q.rawText, subject }),
+        body: JSON.stringify({ rawText: q.rawText }),
       });
       Object.assign(q, {
         question: result.question,
@@ -263,6 +263,7 @@ async function processPdfQuestions() {
         correctAnswer: result.correctAnswer,
         explanation: result.explanation,
         difficulty: result.difficulty || 'Medium',
+        questionType: result.questionType,
         status: 'done',
         included: true,
         error: '',
@@ -286,7 +287,6 @@ async function handlePdfUpload(e) {
   errEl.classList.add('hidden');
 
   const examId = document.getElementById('pdfExamId').value;
-  const subject = document.getElementById('pdfSubject').value;
   const fileInput = document.getElementById('pdfFile');
   const file = fileInput.files?.[0];
 
@@ -310,7 +310,6 @@ async function handlePdfUpload(e) {
 
     pdfReviewState = {
       examId,
-      subject,
       questions: data.questions.map((q) => ({
         ...q,
         difficulty: 'Medium',

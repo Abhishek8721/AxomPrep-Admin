@@ -26,7 +26,7 @@ const {
   fromFirestoreDoc: fromPaperDoc,
 } = require('../utils/questionPapers');
 const { requireAuth } = require('../middleware/auth');
-const { generateQuestionFromPaste } = require('../utils/ai');
+const { generateQuestionFromPaste, generatePaperQuestion } = require('../utils/ai');
 const { extractEnglishMcqsFromPdf } = require('../utils/pdfParser');
 const multer = require('multer');
 const {
@@ -423,11 +423,10 @@ router.post('/question-papers/parse-pdf', (req, res, next) => {
   }
 });
 
-/** POST /api/question-papers/process-question — verify one extracted MCQ with AI */
+/** POST /api/question-papers/process-question — auto-detect type, verify answer & explanation */
 router.post('/question-papers/process-question', async (req, res) => {
   try {
-    const { rawText, subject } = req.body;
-    const generated = await generateQuestionFromPaste(rawText, subject);
+    const generated = await generatePaperQuestion(req.body.rawText);
     res.json(generated);
   } catch (err) {
     console.error('Process question error:', err);

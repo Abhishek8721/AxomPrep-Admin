@@ -433,6 +433,110 @@ function alignGeneratedAnswer(generated, verified) {
   generated.category = verified.category;
 }
 
+function detectCategoryAuto(rawText, parsedOptions) {
+  const questionType = detectQuestionType(rawText, parsedOptions);
+  if (questionType === 'maths') return { questionType, category: 'maths' };
+  if (questionType === 'reasoning') return { questionType, category: 'reasoning' };
+
+  const blob = String(rawText || '').toLowerCase();
+  const englishPatterns = [
+    /grammar|synonym|antonym|spelling|passage|comprehension|vocabulary|idiom|phrasal/i,
+    /fill in the blank|one word substitution|error spotting|preposition|article|tense/i,
+    /choose the correct (word|form|sentence)|replace the underlined/i,
+  ];
+  if (englishPatterns.some((p) => p.test(blob))) {
+    return { questionType: 'factual', category: 'english' };
+  }
+  return { questionType: 'factual', category: 'assam_gk' };
+}
+
+function questionTypeLabel(type) {
+  if (type === 'maths') return 'Maths';
+  if (type === 'reasoning') return 'Reasoning';
+  return 'GK / English';
+}
+
+function validatePaperGenerated(data, verified) {
+  const errors = [];
+
+  if (!data.question || !String(data.question).trim()) errors.push('Missing question');
+  if (!Array.isArray(data.options) || data.options.length !== 4) {
+    errors.push('Must have exactly 4 options');
+  } else if (data.options.some((o) => !String(o).trim())) {
+    errors.push('All options must be non-empty');
+  }
+  const ca = Number(data.correctAnswer);
+  if (Number.isNaN(ca) || ca < 0 || ca > 3) errors.push('correctAnswer must be 0–3');
+  if (!data.explanation || !String(data.explanation).trim()) errors.push('Missing explanation');
+  if (!DIFFICULTIES.includes(data.difficulty)) errors.push('Invalid difficulty');
+
+  if (errors.length) throw new Error(`AI response invalid: ${errors.join(', ')}`);
+
+  const sourceIdx = verified.sourceAnswerIndex;
+  const sourceWrong =
+    verified.sourceAnswerWrong !== undefined
+      ? verified.sourceAnswerWrong
+      : sourceIdx >= 0
+        ? sourceIdx !== ca
+        : Boolean(data.sourceAnswerWrong);
+
+  return {
+    question: String(data.question).trim(),
+    options: data.options.map((o) => String(o).trim()),
+    correctAnswer: ca,
+    explanation: String(data.explanation).trim(),
+    difficulty: data.difficulty,
+    answerVerified: verified.confidence !== 'low',
+    sourceAnswerWrong: Boolean(sourceWrong),
+    verificationNote:
+      verified.verificationNote ||
+      (data.verificationNote ? String(data.verificationNote).trim() : ''),
+    verifiedBy: verified.source || 'web',
+    questionType: verified.questionType || 'factual',
+  };
+}
+
+async function generatePaperQuestion(rawText) {
+  const text = String(rawText || '').trim();
+  if (!text) {
+    throw new Error('Question text is required');
+  }
+
+  const parsedOptions = extractOptions(text);
+  const { questionType, category } = detectCategoryAuto(text, parsedOptions);
+
+  const verified = await verifyAnswer(text, category);
+  verified.questionType = questionType;
+  verified.category = category;
+
+  const correctLabel = verified.options[verified.correctAnswer];
+  const generatePrompt = getGeneratePrompt(questionType);
+  const verifiedMethod =
+    questionType === 'factual' ? 'web search' : `step-by-step ${questionType} solution`;
+
+  const generated = await callAzure(
+    [
+      { role: 'system', content: generatePrompt },
+      {
+        role: 'user',
+        content: `PASTED QUESTION:\n${text}\n\nVERIFIED BY: ${verifiedMethod}\nVERIFIED CORRECT OPTION: "${correctLabel}"\nVERIFIED INDEX IN SOURCE OPTIONS: ${verified.correctAnswer}\nSOURCE OPTIONS: ${JSON.stringify(verified.options)}\nVERIFIED EXPLANATION (keep this working in the final explanation):\n${verified.explanation || verified.verificationNote}\n\nPick an appropriate difficulty (Easy, Medium, or Hard) for this exam-level question.`,
+      },
+    ],
+    {
+      temperature: questionType === 'factual' ? 0.5 : 0.3,
+      maxTokens: questionType === 'factual' ? 1400 : 1800,
+    }
+  );
+
+  alignGeneratedAnswer(generated, verified);
+
+  const shuffled = shuffleOptions(generated.options, Number(generated.correctAnswer));
+  generated.options = shuffled.options;
+  generated.correctAnswer = shuffled.correctAnswer;
+
+  return validatePaperGenerated(generated, verified);
+}
+
 async function generateQuestionFromPaste(rawText, category) {
   const text = String(rawText || '').trim();
   if (!text) {
@@ -474,4 +578,9 @@ async function generateQuestionFromPaste(rawText, category) {
   return validateGenerated(generated, verified);
 }
 
-module.exports = { generateQuestionFromPaste, detectQuestionType: (text) => detectQuestionType(text, extractOptions(text)) };
+module.exports = {
+  generateQuestionFromPaste,
+  generatePaperQuestion,
+  detectQuestionType: (text) => detectQuestionType(text, extractOptions(text)),
+  questionTypeLabel,
+};
