@@ -598,17 +598,32 @@ async function loadQuestions() {
   const search = document.getElementById('searchInput').value.trim();
   if (search) params.set('search', search);
 
-  const data = await api(`${apiBase()}?${params}`);
-  allQuestions = data.questions;
+  if (currentMode === 'papers' && !group) {
+    allQuestions = [];
+    renderTable([]);
+    document.getElementById('statsBar').textContent =
+      'Select an exam from the filter above to load question papers.';
+    return;
+  }
 
-  const diffFilter = document.getElementById('filterDifficulty').value;
-  const filtered = diffFilter
-    ? allQuestions.filter((q) => q.difficulty === diffFilter)
-    : allQuestions;
+  try {
+    const data = await api(`${apiBase()}?${params}`);
+    allQuestions = data.questions;
 
-  renderTable(filtered);
-  document.getElementById('statsBar').textContent =
-    `${filtered.length} question${filtered.length !== 1 ? 's' : ''} shown`;
+    const diffFilter = document.getElementById('filterDifficulty').value;
+    const filtered = diffFilter
+      ? allQuestions.filter((q) => q.difficulty === diffFilter)
+      : allQuestions;
+
+    renderTable(filtered);
+    let stats = `${filtered.length} question${filtered.length !== 1 ? 's' : ''} shown`;
+    if (data.truncated && data.hint) stats += ` — ${data.hint}`;
+    document.getElementById('statsBar').textContent = stats;
+  } catch (err) {
+    showAlert(err.message, 'error');
+    renderTable([]);
+    document.getElementById('statsBar').textContent = 'Could not load questions';
+  }
 }
 
 function renderTable(questions) {
@@ -998,13 +1013,28 @@ switchMode = function (mode) {
   updateTableHeadersForExams();
 };
 
+async function syncAssameseFlags(collection) {
+  let startAfter = null;
+  let scanned = 0;
+  while (true) {
+    const result = await api('/api/translate-assamese/sync-flags', {
+      method: 'POST',
+      body: JSON.stringify({ collection, limit: 100, startAfter }),
+    });
+    scanned += result.scanned || 0;
+    if (result.done) break;
+    startAfter = result.nextStartAfter;
+  }
+  return scanned;
+}
+
 async function translateAllToAssamese() {
   const collection = currentMode === 'papers' ? 'question_papers' : 'questions';
   const label = currentMode === 'papers' ? 'question papers' : 'practice questions';
 
   if (
     !confirm(
-      `Translate all ${label} missing Assamese text using AI?\n\nThis runs in batches and may take several minutes. Azure OpenAI must be configured.`
+      `Translate all ${label} missing Assamese text using AI?\n\nThis runs in small batches and may take several minutes. Azure OpenAI must be configured.`
     )
   ) {
     return;
@@ -1019,11 +1049,14 @@ async function translateAllToAssamese() {
   const allErrors = [];
 
   try {
+    btn.textContent = 'Syncing flags…';
+    await syncAssameseFlags(collection);
+
     while (remaining > 0) {
       btn.textContent = `Translating… (${totalTranslated} done)`;
       const result = await api('/api/translate-assamese/bulk', {
         method: 'POST',
-        body: JSON.stringify({ collection, batchSize: 5, missingOnly: true }),
+        body: JSON.stringify({ collection, batchSize: 5 }),
       });
 
       totalTranslated += result.translated || 0;

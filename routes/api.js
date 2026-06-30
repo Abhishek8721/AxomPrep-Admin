@@ -96,12 +96,15 @@ router.get('/questions', async (req, res) => {
     const db = getDb();
     const col = db.collection(getCollectionName());
     const { category, search } = req.query;
+    const LIST_CAP = 250;
 
     let snapshot;
+    let truncated = false;
     if (category) {
       snapshot = await col.where('category', '==', category).get();
     } else {
-      snapshot = await col.get();
+      snapshot = await col.limit(LIST_CAP).get();
+      truncated = snapshot.size >= LIST_CAP;
     }
 
     let questions = snapshot.docs.map(fromFirestoreDoc);
@@ -121,7 +124,14 @@ router.get('/questions', async (req, res) => {
       return (a.id || 0) - (b.id || 0);
     });
 
-    res.json({ questions, total: questions.length });
+    res.json({
+      questions,
+      total: questions.length,
+      truncated,
+      hint: truncated
+        ? 'Select a category filter to load one subject at a time and avoid Firestore quota limits.'
+        : null,
+    });
   } catch (err) {
     console.error('List questions error:', err);
     res.status(500).json({ error: err.message });
@@ -335,7 +345,7 @@ router.patch('/questions/:docId/toggle', async (req, res) => {
 
 // ── Question Papers (`question_papers` collection) ─────────────────
 
-/** GET /api/question-papers — list with optional ?paper= & ?search= */
+/** GET /api/question-papers — list with optional ?examId= & ?search= */
 router.get('/question-papers', async (req, res) => {
   try {
     const db = getDb();
@@ -343,14 +353,16 @@ router.get('/question-papers', async (req, res) => {
     const { paper, search } = req.query;
     const examId = req.query.examId || paper;
 
-    let snapshot;
-    if (examId) {
-      snapshot = await col.where('examId', '==', examId).get();
-      if (snapshot.empty) {
-        snapshot = await col.where('paper', '==', examId).get();
-      }
-    } else {
-      snapshot = await col.get();
+    if (!examId) {
+      return res.status(400).json({
+        error:
+          'Select an exam from the filter dropdown. Loading all question papers at once uses too many Firestore reads and can exceed your daily quota.',
+      });
+    }
+
+    let snapshot = await col.where('examId', '==', examId).get();
+    if (snapshot.empty) {
+      snapshot = await col.where('paper', '==', examId).get();
     }
 
     let questions = snapshot.docs.map(fromPaperDoc);
@@ -710,7 +722,6 @@ router.patch('/exams/:docId/toggle', async (req, res) => {
 router.post('/translate-assamese/bulk', async (req, res) => {
   const collection = req.body.collection === 'question_papers' ? 'question_papers' : 'questions';
   const batchSize = Math.min(Math.max(Number(req.body.batchSize) || 5, 1), 10);
-  const missingOnly = req.body.missingOnly !== false;
 
   try {
     const colName =
@@ -718,17 +729,9 @@ router.post('/translate-assamese/bulk', async (req, res) => {
         ? getQuestionPaperCollectionName()
         : getCollectionName();
     const col = getDb().collection(colName);
-    const snapshot = await col.get();
 
-    let candidates = snapshot.docs;
-    if (missingOnly) {
-      candidates = candidates.filter((doc) => {
-        const d = doc.data();
-        return !d.questionAs || !Array.isArray(d.optionsAs) || d.optionsAs.length !== 4;
-      });
-    }
-
-    const batch = candidates.slice(0, batchSize);
+    const snapshot = await col.where('assameseReady', '==', false).limit(batchSize).get();
+    const batch = snapshot.docs;
     let translated = 0;
     const errors = [];
 
@@ -738,6 +741,7 @@ router.post('/translate-assamese/bulk', async (req, res) => {
         const as = await translateQuestionToAssamese(data);
         await doc.ref.update({
           ...as,
+          assameseReady: true,
           updatedAt: new Date().toISOString(),
         });
         translated += 1;
@@ -746,16 +750,64 @@ router.post('/translate-assamese/bulk', async (req, res) => {
       }
     }
 
+    const remainingSnap = await col.where('assameseReady', '==', false).limit(1).get();
+
     res.json({
       collection,
       translated,
-      remaining: Math.max(0, candidates.length - batch.length),
-      pending: candidates.length,
+      remaining: remainingSnap.empty ? 0 : 1,
+      pending: remainingSnap.empty ? 0 : 'more',
       errors,
     });
   } catch (err) {
     console.error('Bulk translate error:', err);
     res.status(err.message.includes('not configured') ? 503 : 500).json({ error: err.message });
+  }
+});
+
+/** POST /api/translate-assamese/sync-flags — one-time: set assameseReady on existing docs (no AI) */
+router.post('/translate-assamese/sync-flags', async (req, res) => {
+  const collection = req.body.collection === 'question_papers' ? 'question_papers' : 'questions';
+  const limit = Math.min(Math.max(Number(req.body.limit) || 100, 1), 200);
+  const startAfter = req.body.startAfter || null;
+
+  try {
+    const colName =
+      collection === 'question_papers'
+        ? getQuestionPaperCollectionName()
+        : getCollectionName();
+    const col = getDb().collection(colName);
+    const { FieldPath } = require('firebase-admin/firestore');
+
+    let query = col.orderBy(FieldPath.documentId()).limit(limit);
+    if (startAfter) query = query.startAfter(startAfter);
+
+    const snapshot = await query.get();
+    let updated = 0;
+
+    for (const doc of snapshot.docs) {
+      const d = doc.data();
+      const ready = Boolean(
+        d.questionAs && Array.isArray(d.optionsAs) && d.optionsAs.length === 4 && d.explanationAs
+      );
+      if (d.assameseReady !== ready) {
+        await doc.ref.update({ assameseReady: ready, updatedAt: new Date().toISOString() });
+        updated += 1;
+      }
+    }
+
+    const lastId = snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1].id : null;
+
+    res.json({
+      collection,
+      scanned: snapshot.size,
+      updated,
+      nextStartAfter: snapshot.size === limit ? lastId : null,
+      done: snapshot.size < limit,
+    });
+  } catch (err) {
+    console.error('Sync assamese flags error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

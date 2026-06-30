@@ -64,6 +64,7 @@ function toFirestorePayload(body) {
     explanation: String(body.explanation).trim(),
     difficulty: body.difficulty,
     active: body.active !== false,
+    assameseReady: false,
     updatedAt: new Date().toISOString(),
   };
   if (body.questionAs) payload.questionAs = String(body.questionAs).trim();
@@ -71,6 +72,12 @@ function toFirestorePayload(body) {
     payload.optionsAs = body.optionsAs.map((o) => String(o).trim());
   }
   if (body.explanationAs) payload.explanationAs = String(body.explanationAs).trim();
+  payload.assameseReady = Boolean(
+    payload.questionAs &&
+      Array.isArray(payload.optionsAs) &&
+      payload.optionsAs.length === 4 &&
+      payload.explanationAs
+  );
   return payload;
 }
 
@@ -78,6 +85,12 @@ function preserveAssameseFields(payload, existing = {}) {
   if (!payload.questionAs && existing.questionAs) payload.questionAs = existing.questionAs;
   if (!payload.optionsAs && existing.optionsAs) payload.optionsAs = existing.optionsAs;
   if (!payload.explanationAs && existing.explanationAs) payload.explanationAs = existing.explanationAs;
+  payload.assameseReady = Boolean(
+    payload.questionAs &&
+      Array.isArray(payload.optionsAs) &&
+      payload.optionsAs.length === 4 &&
+      payload.explanationAs
+  );
   return payload;
 }
 
