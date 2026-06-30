@@ -600,9 +600,51 @@ async function generateQuestionFromPaste(rawText, category) {
   return validateGenerated(generated, verified);
 }
 
+const TRANSLATE_ASSAMESE_PROMPT = `You are a professional translator for AxomPrep, an Assam competitive exam app.
+
+Translate the English MCQ into natural Assamese (অসমীয়া) suitable for students preparing for ADRE, SSC, APSC, and police exams.
+
+Rules:
+- Keep the same meaning as English. Do not change facts or numbers.
+- optionsAs must have exactly 4 items in the same order as English options.
+- Use clear, exam-appropriate Assamese.
+- Return JSON only:
+{
+  "questionAs": "Assamese question text",
+  "optionsAs": ["option A in Assamese", "option B", "option C", "option D"],
+  "explanationAs": "Assamese explanation"
+}`;
+
+async function translateQuestionToAssamese(item) {
+  const userContent = `Translate to Assamese:
+
+Question: ${item.question}
+Options: ${JSON.stringify(item.options)}
+Explanation: ${item.explanation}`;
+
+  const result = await callAzure(
+    [
+      { role: 'system', content: TRANSLATE_ASSAMESE_PROMPT },
+      { role: 'user', content: userContent },
+    ],
+    { temperature: 0.2, maxTokens: 1500 }
+  );
+
+  if (!result.questionAs || !Array.isArray(result.optionsAs) || result.optionsAs.length !== 4) {
+    throw new Error('AI returned invalid Assamese translation');
+  }
+
+  return {
+    questionAs: String(result.questionAs).trim(),
+    optionsAs: result.optionsAs.map((o) => String(o).trim()),
+    explanationAs: String(result.explanationAs || '').trim(),
+  };
+}
+
 module.exports = {
   generateQuestionFromPaste,
   generatePaperQuestion,
+  translateQuestionToAssamese,
   detectQuestionType: (text) => detectQuestionType(text, extractOptions(text)),
   questionTypeLabel,
 };

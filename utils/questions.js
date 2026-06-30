@@ -55,7 +55,7 @@ function validateQuestion(body, { isCreate = false } = {}) {
 }
 
 function toFirestorePayload(body) {
-  return {
+  const payload = {
     id: Number(body.id),
     category: body.category,
     question: String(body.question).trim(),
@@ -66,6 +66,19 @@ function toFirestorePayload(body) {
     active: body.active !== false,
     updatedAt: new Date().toISOString(),
   };
+  if (body.questionAs) payload.questionAs = String(body.questionAs).trim();
+  if (Array.isArray(body.optionsAs) && body.optionsAs.length === 4) {
+    payload.optionsAs = body.optionsAs.map((o) => String(o).trim());
+  }
+  if (body.explanationAs) payload.explanationAs = String(body.explanationAs).trim();
+  return payload;
+}
+
+function preserveAssameseFields(payload, existing = {}) {
+  if (!payload.questionAs && existing.questionAs) payload.questionAs = existing.questionAs;
+  if (!payload.optionsAs && existing.optionsAs) payload.optionsAs = existing.optionsAs;
+  if (!payload.explanationAs && existing.explanationAs) payload.explanationAs = existing.explanationAs;
+  return payload;
 }
 
 function fromFirestoreDoc(doc) {
@@ -83,6 +96,7 @@ module.exports = {
   buildDocId,
   parseDocId,
   validateQuestion,
+  preserveAssameseFields,
   toFirestorePayload,
   fromFirestoreDoc,
 };

@@ -12,6 +12,7 @@ const {
   validateQuestion,
   toFirestorePayload,
   fromFirestoreDoc,
+  preserveAssameseFields,
 } = require('../utils/questions');
 const {
   EXAM_TYPES,
@@ -24,9 +25,10 @@ const {
   validateQuestionPaper,
   toFirestorePayload: toPaperPayload,
   fromFirestoreDoc: fromPaperDoc,
+  preserveAssameseFields: preservePaperAssamese,
 } = require('../utils/questionPapers');
 const { requireAuth } = require('../middleware/auth');
-const { generateQuestionFromPaste, generatePaperQuestion } = require('../utils/ai');
+const { generateQuestionFromPaste, generatePaperQuestion, translateQuestionToAssamese } = require('../utils/ai');
 const { extractEnglishMcqsFromPdf } = require('../utils/pdfParser');
 const multer = require('multer');
 const {
@@ -271,11 +273,12 @@ router.put('/questions/:docId', async (req, res) => {
   }
 
   const newDocId = buildDocId(req.body.category, req.body.id);
-  const payload = toFirestorePayload(req.body);
 
   try {
     const col = getDb().collection(getCollectionName());
     const oldRef = col.doc(req.params.docId);
+    const oldData = (await oldRef.get()).data() || {};
+    const payload = preserveAssameseFields(toFirestorePayload(req.body), oldData);
 
     if (newDocId !== req.params.docId) {
       const conflict = await col.doc(newDocId).get();
@@ -430,21 +433,21 @@ router.put('/question-papers/:docId', async (req, res) => {
 
   const examId = req.body.examId || req.body.paper;
   const newDocId = buildPaperDocId(examId, req.body.id);
-  const payload = toPaperPayload(req.body);
 
   try {
     const col = getDb().collection(getQuestionPaperCollectionName());
     const oldRef = col.doc(req.params.docId);
+    const oldData = (await oldRef.get()).data() || {};
+    const payload = preservePaperAssamese(toPaperPayload(req.body), oldData);
 
     if (newDocId !== req.params.docId) {
       const conflict = await col.doc(newDocId).get();
       if (conflict.exists) {
         return res.status(409).json({ error: `Target id ${newDocId} already exists` });
       }
-      const oldData = (await oldRef.get()).data();
       await col.doc(newDocId).set({
         ...payload,
-        createdAt: oldData?.createdAt || new Date().toISOString(),
+        createdAt: oldData.createdAt || new Date().toISOString(),
       });
       await oldRef.delete();
       return res.json({ docId: newDocId, ...payload });
@@ -698,6 +701,61 @@ router.patch('/exams/:docId/toggle', async (req, res) => {
     res.json({ docId: req.params.docId, active });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Bulk translate to Assamese ─────────────────────────────────────
+
+/** POST /api/translate-assamese/bulk — translate a batch (missing Assamese only) */
+router.post('/translate-assamese/bulk', async (req, res) => {
+  const collection = req.body.collection === 'question_papers' ? 'question_papers' : 'questions';
+  const batchSize = Math.min(Math.max(Number(req.body.batchSize) || 5, 1), 10);
+  const missingOnly = req.body.missingOnly !== false;
+
+  try {
+    const colName =
+      collection === 'question_papers'
+        ? getQuestionPaperCollectionName()
+        : getCollectionName();
+    const col = getDb().collection(colName);
+    const snapshot = await col.get();
+
+    let candidates = snapshot.docs;
+    if (missingOnly) {
+      candidates = candidates.filter((doc) => {
+        const d = doc.data();
+        return !d.questionAs || !Array.isArray(d.optionsAs) || d.optionsAs.length !== 4;
+      });
+    }
+
+    const batch = candidates.slice(0, batchSize);
+    let translated = 0;
+    const errors = [];
+
+    for (const doc of batch) {
+      try {
+        const data = doc.data();
+        const as = await translateQuestionToAssamese(data);
+        await doc.ref.update({
+          ...as,
+          updatedAt: new Date().toISOString(),
+        });
+        translated += 1;
+      } catch (err) {
+        errors.push({ docId: doc.id, error: err.message });
+      }
+    }
+
+    res.json({
+      collection,
+      translated,
+      remaining: Math.max(0, candidates.length - batch.length),
+      pending: candidates.length,
+      errors,
+    });
+  } catch (err) {
+    console.error('Bulk translate error:', err);
+    res.status(err.message.includes('not configured') ? 503 : 500).json({ error: err.message });
   }
 });
 

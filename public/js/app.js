@@ -106,6 +106,7 @@ function updateModeUi() {
 
   document.getElementById('aiPasteSection').classList.toggle('hidden', isPapers);
   document.getElementById('btnUploadPdf').classList.toggle('hidden', isExams);
+  document.getElementById('btnTranslateAs').classList.toggle('hidden', isExams);
 }
 
 async function apiFormData(url, formData) {
@@ -997,8 +998,57 @@ switchMode = function (mode) {
   updateTableHeadersForExams();
 };
 
+async function translateAllToAssamese() {
+  const collection = currentMode === 'papers' ? 'question_papers' : 'questions';
+  const label = currentMode === 'papers' ? 'question papers' : 'practice questions';
+
+  if (
+    !confirm(
+      `Translate all ${label} missing Assamese text using AI?\n\nThis runs in batches and may take several minutes. Azure OpenAI must be configured.`
+    )
+  ) {
+    return;
+  }
+
+  const btn = document.getElementById('btnTranslateAs');
+  const original = btn.textContent;
+  btn.disabled = true;
+
+  let totalTranslated = 0;
+  let remaining = 1;
+  const allErrors = [];
+
+  try {
+    while (remaining > 0) {
+      btn.textContent = `Translating… (${totalTranslated} done)`;
+      const result = await api('/api/translate-assamese/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ collection, batchSize: 5, missingOnly: true }),
+      });
+
+      totalTranslated += result.translated || 0;
+      remaining = result.remaining || 0;
+      if (result.errors?.length) allErrors.push(...result.errors);
+
+      if (!result.translated && remaining > 0) {
+        throw new Error(result.errors?.[0]?.error || 'Translation stopped with errors');
+      }
+    }
+
+    const errNote = allErrors.length ? ` (${allErrors.length} failed)` : '';
+    showAlert(`Translated ${totalTranslated} question(s) to Assamese${errNote}`);
+    await loadData();
+  } catch (err) {
+    showAlert(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
 // Event listeners
 document.getElementById('btnNew').addEventListener('click', handleNewClick);
+document.getElementById('btnTranslateAs').addEventListener('click', translateAllToAssamese);
 document.getElementById('btnUploadPdf').addEventListener('click', openPdfUploadModal);
 document.getElementById('btnGenerateAi').addEventListener('click', generateWithAi);
 document.getElementById('pdfUploadForm').addEventListener('submit', handlePdfUpload);
